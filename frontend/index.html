@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>YT-DLP Rusty GUI</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <h1>YT-DLP Rusty GUI</h1>
+
+    <section class="row">
+      <label for="url">URL</label>
+      <input id="url" type="text" placeholder="https://..." />
+      <button id="paste-btn">Paste</button>
+    </section>
+
+    <section class="row">
+      <label for="output-dir">Output Directory</label>
+      <input id="output-dir" type="text" />
+      <button id="browse-btn">Browse</button>
+    </section>
+
+    <section class="row">
+      <label>Download Type</label>
+      <label class="radio">
+        <input type="radio" name="download-type" value="video_audio" checked />
+        Video+Audio (MP4)
+      </label>
+      <label class="radio">
+        <input type="radio" name="download-type" value="audio_only" />
+        Audio Only (MP3)
+      </label>
+    </section>
+
+    <section id="format-section">
+      <div class="row">
+        <button id="fetch-btn">Fetch Formats</button>
+      </div>
+
+      <div class="row" id="video-format-row" style="display:none">
+        <label for="video-format">Video Format</label>
+        <select id="video-format"></select>
+      </div>
+
+      <div class="row" id="audio-format-row" style="display:none">
+        <label for="audio-format">Audio Format</label>
+        <select id="audio-format"></select>
+      </div>
+    </section>
+
+    <section class="row">
+      <button id="download-btn">Download</button>
+      <span id="spinner" class="spinner" style="display:none"></span>
+    </section>
+
+    <section class="row">
+      <strong>Status:</strong>
+      <span id="status">Checking yt-dlp...</span>
+    </section>
+
+    <section id="format-lists" style="display:none">
+      <details open>
+        <summary>Available Video Formats</summary>
+        <div id="video-format-table"></div>
+      </details>
+      <details open>
+        <summary>Available Audio Formats</summary>
+        <div id="audio-format-table"></div>
+      </details>
+    </section>
+  </main>
+
+  <script src="main.js"></script>
+</body>
+</html>
