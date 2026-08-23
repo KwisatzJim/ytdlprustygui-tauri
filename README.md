@@ -26,7 +26,7 @@ git clone https://github.com/KwisatzJim/ytdlprustygui
 ```
 
 ```
-cd ytdlprustygui
+cd ytdlprustygui-tauri
 ```
 
 <img width="1012" height="812" alt="Screenshot 2026-07-19 at 2 42 19 PM" src="https://github.com/user-attachments/assets/905ffcbf-99e9-47a4-9729-8a0ba60ca975" />

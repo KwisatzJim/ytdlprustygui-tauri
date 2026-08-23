@@ -4,7 +4,7 @@
   "version": "0.2.0",
   "identifier": "com.jim.ytdlprustygui",
   "build": {
-    "frontendDist": "../frontend"
+    "frontendDist": "frontend"
   },
   "app": {
     "withGlobalTauri": true,

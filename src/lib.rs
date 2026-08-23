@@ -105,6 +105,95 @@ fn check_ytdlp() -> Result<String, String> {
     }
 }
 
+/// Raw per-format fields we care about from yt-dlp's JSON output. `#[serde(default)]`
+/// on everything but `format_id`/`ext` because not every extractor populates every
+/// field, and a missing field should mean "unknown", not a parse failure.
+#[derive(Debug, Clone, Deserialize)]
+struct YtDlpFormat {
+    format_id: String,
+    ext: String,
+    #[serde(default)]
+    resolution: Option<String>,
+    #[serde(default)]
+    vcodec: Option<String>,
+    #[serde(default)]
+    acodec: Option<String>,
+    #[serde(default)]
+    width: Option<f64>,
+    #[serde(default)]
+    height: Option<f64>,
+    #[serde(default)]
+    fps: Option<f64>,
+    #[serde(default)]
+    abr: Option<f64>,
+    #[serde(default)]
+    vbr: Option<f64>,
+    #[serde(default)]
+    tbr: Option<f64>,
+    #[serde(default)]
+    filesize: Option<f64>,
+    #[serde(default)]
+    filesize_approx: Option<f64>,
+    #[serde(default)]
+    format_note: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct YtDlpInfo {
+    #[serde(default)]
+    formats: Option<Vec<YtDlpFormat>>,
+    #[serde(default)]
+    entries: Option<Vec<serde_json::Value>>,
+}
+
+fn human_size(bytes: f64) -> String {
+    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
+    let mut size = bytes;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    format!("{size:.2}{}", UNITS[unit])
+}
+
+fn build_description(f: &YtDlpFormat, is_video: bool, is_audio: bool) -> String {
+    let mut parts: Vec<String> = Vec::new();
+
+    if is_video {
+        if let Some(vcodec) = f.vcodec.as_deref().filter(|v| *v != "none") {
+            parts.push(vcodec.to_string());
+        }
+        if let Some(vbr) = f.vbr {
+            parts.push(format!("{}k video", vbr.round() as i64));
+        }
+        if let Some(fps) = f.fps {
+            parts.push(format!("{}fps", fps.round() as i64));
+        }
+    }
+
+    if is_audio {
+        if let Some(acodec) = f.acodec.as_deref().filter(|a| *a != "none") {
+            parts.push(acodec.to_string());
+        }
+        if let Some(abr) = f.abr {
+            parts.push(format!("{}k audio", abr.round() as i64));
+        }
+    }
+
+    if let Some(size) = f.filesize.or(f.filesize_approx) {
+        parts.push(human_size(size));
+    } else if let Some(tbr) = f.tbr {
+        parts.push(format!("~{}k", tbr.round() as i64));
+    }
+
+    if let Some(note) = f.format_note.as_deref().filter(|n| !n.is_empty()) {
+        parts.push(note.to_string());
+    }
+
+    parts.join(", ")
+}
+
 #[tauri::command]
 async fn fetch_formats(url: String) -> Result<FormatsResult, String> {
     let url = url.trim().to_string();
@@ -112,9 +201,17 @@ async fn fetch_formats(url: String) -> Result<FormatsResult, String> {
         return Err("Please enter a URL first".into());
     }
 
+    // Structured JSON instead of scraping the human-readable --list-formats
+    // table: that table's column layout (which columns appear, multi-word
+    // cells like "audio only", the │/- delimiter glyphs) varies per video and
+    // per yt-dlp version, which made the old whitespace-splitting parser
+    // silently misclassify or drop formats on some videos. -J/--dump-single-json
+    // gives every format's fields directly, so there's no table to misparse.
+    // --no-playlist keeps this to the single video at the URL, matching what
+    // the rest of this app (and the old table parser) already assumed.
     let output = tokio::process::Command::new("yt-dlp")
         .strip_appimage_env()
-        .args(["--list-formats", &url])
+        .args(["--no-warnings", "--no-playlist", "-J", &url])
         .output()
         .await
         .map_err(|e| format!("Failed to execute yt-dlp: {e}"))?;
@@ -126,11 +223,57 @@ async fn fetch_formats(url: String) -> Result<FormatsResult, String> {
         ));
     }
 
-    let output_str = String::from_utf8_lossy(&output.stdout).to_string();
-    let formats = parse_formats(&output_str);
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let info: YtDlpInfo = serde_json::from_str(&output_str)
+        .map_err(|e| format!("Failed to parse yt-dlp's output as JSON: {e}"))?;
 
-    let video: Vec<Format> = formats.iter().filter(|f| f.is_video).cloned().collect();
-    let audio: Vec<Format> = formats.iter().filter(|f| f.is_audio).cloned().collect();
+    if info.entries.is_some() {
+        return Err("This URL is a playlist. Please paste a single video URL.".into());
+    }
+
+    let raw_formats = info
+        .formats
+        .ok_or_else(|| "yt-dlp did not report any formats for this URL".to_string())?;
+
+    let mut video = Vec::new();
+    let mut audio = Vec::new();
+
+    for f in raw_formats {
+        // Storyboard "formats" (mhtml thumbnail sheets) aren't real media.
+        if f.ext == "mhtml" {
+            continue;
+        }
+
+        let is_video = f.vcodec.as_deref().map(|v| v != "none").unwrap_or(false);
+        let is_audio = f.acodec.as_deref().map(|a| a != "none").unwrap_or(false);
+        if !is_video && !is_audio {
+            continue;
+        }
+
+        let resolution = f.resolution.clone().unwrap_or_else(|| match (f.width, f.height) {
+            (Some(w), Some(h)) => format!("{}x{}", w as i64, h as i64),
+            _ if is_video => "unknown".to_string(),
+            _ => "audio only".to_string(),
+        });
+
+        let description = build_description(&f, is_video, is_audio);
+
+        let format = Format {
+            id: f.format_id.clone(),
+            extension: f.ext.clone(),
+            resolution,
+            description,
+            is_video,
+            is_audio,
+        };
+
+        if is_video {
+            video.push(format.clone());
+        }
+        if is_audio {
+            audio.push(format);
+        }
+    }
 
     if video.is_empty() && audio.is_empty() {
         return Err("No formats available or could not distinguish audio/video formats".into());
@@ -203,85 +346,6 @@ async fn download(
             String::from_utf8_lossy(&output.stderr)
         ))
     }
-}
-
-fn parse_formats(output: &str) -> Vec<Format> {
-    let mut formats = Vec::new();
-
-    // Flag to indicate we've reached the format table section
-    let mut in_format_table = false;
-
-    for line in output.lines() {
-        // Skip lines until we find the format table header
-        if line.contains("ID") && line.contains("EXT") && line.contains("RESOLUTION") {
-            in_format_table = true;
-            continue;
-        }
-
-        if !in_format_table {
-            continue;
-        }
-
-        // Skip empty lines or lines without format information
-        if line.trim().is_empty() || !line.contains(' ') {
-            continue;
-        }
-
-        // Parse format line
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts.len() >= 3 {
-            // The format ID is always the first part
-            let id = parts[0].to_string();
-
-            // Extract extension (usually the second part)
-            let extension = if parts.len() > 1 {
-                parts[1].to_string()
-            } else {
-                "unknown".to_string()
-            };
-
-            // Extract resolution if available
-            let resolution = if parts.len() > 2 && parts[2].contains('x') {
-                parts[2].to_string()
-            } else {
-                "audio only".to_string()
-            };
-
-            // Join remaining parts as description
-            let description = if parts.len() > 3 {
-                parts[3..].join(" ")
-            } else {
-                String::new()
-            };
-
-            // Detect if this is a video or audio format
-            let is_video = !resolution.contains("audio only")
-                || line.to_lowercase().contains("video only")
-                || (line.contains("mp4") && !line.to_lowercase().contains("audio only"));
-
-            let is_audio = resolution.contains("audio only")
-                || line.to_lowercase().contains("audio only")
-                || extension == "m4a"
-                || extension == "mp3"
-                || extension == "ogg"
-                || extension == "opus";
-
-            // Only add if it's a real format (not a header or separator),
-            // and skip mhtml storyboard "formats" which aren't real video/audio.
-            if !id.contains('-') && !id.contains('=') && extension != "mhtml" {
-                formats.push(Format {
-                    id,
-                    extension,
-                    resolution,
-                    description,
-                    is_video,
-                    is_audio,
-                });
-            }
-        }
-    }
-
-    formats
 }
 
 /// GUI apps on macOS are launched by launchd, not by the user's shell, so they
