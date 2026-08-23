@@ -101,7 +101,7 @@ async function browseDir() {
     });
     if (dir) {
       document.getElementById("output-dir").value = dir;
-      saveOutputDir(dir);
+      saveConfig({ output_dir: dir });
     }
   } catch (e) {
     console.error(e);

@@ -37,6 +37,15 @@ cargo tauri build
 
 app will then be found in ytdlprustygui-tauri/src-tauri/target/release/bundle/
 
+On distros with a newer glibc/binutils toolchain (e.g. CachyOS, Arch), AppImage bundling can fail with
+`ERROR: Strip call failed: ... unknown type [0x13] section '.relr.dyn'`. This is linuxdeploy's bundled
+`strip` not understanding the newer `SHT_RELR` relocation format used by some system libraries — unrelated
+to this app's own code. Work around it by skipping the strip step:
+
+```
+NO_STRIP=true cargo tauri build
+```
+
 <img width="1012" height="812" alt="1 initial scren" src="https://github.com/user-attachments/assets/e5d0b97d-62ba-4c91-b776-6f4450e819aa" />
 
 <img width="1012" height="812" alt="2 fetched formats" src="https://github.com/user-attachments/assets/c8097e87-eb49-4f8d-b711-c8b8e417463e" />
