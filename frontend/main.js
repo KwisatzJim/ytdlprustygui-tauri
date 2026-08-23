@@ -3,11 +3,15 @@ const { invoke } = window.__TAURI__.core;
 const state = {
   videoFormats: [],
   audioFormats: [],
+  // Mirrors the backend's AppConfig. save_config replaces the whole file, so
+  // we keep the full object here and merge into it on every change instead
+  // of sending single-field patches that would wipe out the other fields.
+  config: { output_dir: "", preferred_audio_language: null },
 };
 
 window.addEventListener("DOMContentLoaded", () => {
   checkYtDlp();
-  loadSavedOutputDir();
+  loadConfig();
 
   document.getElementById("paste-btn").addEventListener("click", pasteUrl);
   document.getElementById("browse-btn").addEventListener("click", browseDir);
@@ -17,26 +21,38 @@ window.addEventListener("DOMContentLoaded", () => {
     .querySelectorAll('input[name="download-type"]')
     .forEach((el) => el.addEventListener("change", updateDownloadTypeUI));
   document.getElementById("output-dir").addEventListener("change", (e) => {
-    saveOutputDir(e.target.value.trim());
+    saveConfig({ output_dir: e.target.value.trim() });
+  });
+  document.getElementById("preferred-audio-language").addEventListener("change", (e) => {
+    saveConfig({ preferred_audio_language: e.target.value || null });
+    // Re-pick immediately if formats are already loaded, so changing the
+    // preference doesn't require a re-fetch to take effect.
+    if (state.audioFormats.length) {
+      selectBestAudioFormat();
+    }
   });
 
   updateDownloadTypeUI();
 });
 
-async function loadSavedOutputDir() {
+async function loadConfig() {
   try {
     const config = await invoke("load_config");
+    state.config = config;
     if (config.output_dir) {
       document.getElementById("output-dir").value = config.output_dir;
     }
+    document.getElementById("preferred-audio-language").value =
+      config.preferred_audio_language || "";
   } catch (e) {
     console.error("Failed to load saved config", e);
   }
 }
 
-async function saveOutputDir(outputDir) {
+async function saveConfig(patch) {
+  state.config = { ...state.config, ...patch };
   try {
-    await invoke("save_config", { config: { output_dir: outputDir } });
+    await invoke("save_config", { config: state.config });
   } catch (e) {
     console.error("Failed to save config", e);
   }
@@ -121,6 +137,7 @@ async function fetchFormats() {
     populateFormatSelect("video-format", "video-format-row", state.videoFormats);
     populateFormatSelect("audio-format", "audio-format-row", state.audioFormats);
     selectBestVideoFormat();
+    selectBestAudioFormat();
     document.getElementById("format-lists").style.display = "block";
     renderFormatTables();
 
@@ -161,6 +178,34 @@ function selectBestVideoFormat() {
   if (best) {
     document.getElementById("video-format").value = best.id;
   }
+}
+
+// Picks an audio track to preselect when a video offers more than one.
+// Priority: 1) a track matching the user's preferred language (if set),
+// 2) among those, the one the creator marked as default/original,
+// 3) otherwise just the first track yt-dlp reported.
+function selectBestAudioFormat() {
+  if (!state.audioFormats.length) return;
+
+  const preferredLang = (state.config.preferred_audio_language || "").toLowerCase();
+  let candidates = state.audioFormats;
+
+  if (preferredLang) {
+    // Base-language match (e.g. preference "en" matches track language "en-US").
+    const matches = state.audioFormats.filter((f) =>
+      (f.language || "").toLowerCase().startsWith(preferredLang),
+    );
+    if (matches.length) {
+      candidates = matches;
+    }
+    // If nothing matches the preferred language, fall through to all
+    // candidates rather than leaving the dropdown on its browser default
+    // (usually the lowest-quality track) — matches "prefer creator's default
+    // when the preference can't be satisfied."
+  }
+
+  const chosen = candidates.find((f) => f.is_default_audio) || candidates[0];
+  document.getElementById("audio-format").value = chosen.id;
 }
 
 function renderFormatTables() {

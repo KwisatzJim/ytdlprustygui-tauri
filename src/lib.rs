@@ -6,6 +6,12 @@ use tauri::Manager;
 struct AppConfig {
     #[serde(default)]
     output_dir: String,
+    /// BCP-47-ish language code (e.g. "en", "es", "ja") used to auto-pick an
+    /// audio track on videos that offer more than one language. `None`/absent
+    /// means no preference — falls back to whatever the video creator marked
+    /// as the default/original track.
+    #[serde(default)]
+    preferred_audio_language: Option<String>,
 }
 
 fn config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -74,6 +80,13 @@ struct Format {
     description: String,
     is_video: bool,
     is_audio: bool,
+    /// Audio track language code (e.g. "en", "es"), when yt-dlp's extractor
+    /// reports one. `None` for extractors/videos that don't expose per-track
+    /// language (most sites only have one audio track anyway).
+    language: Option<String>,
+    /// True when the video creator marked this as the default/original audio
+    /// track for its language (YouTube's multi-audio-track videos only).
+    is_default_audio: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,6 +149,13 @@ struct YtDlpFormat {
     filesize_approx: Option<f64>,
     #[serde(default)]
     format_note: Option<String>,
+    #[serde(default)]
+    language: Option<String>,
+    /// YouTube-specific: 10 = the original-language track, 5 = a track the
+    /// creator otherwise marked default, lower/absent = a dubbed/alternate
+    /// track. Other extractors leave this unset.
+    #[serde(default)]
+    language_preference: Option<i64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -256,7 +276,18 @@ async fn fetch_formats(url: String) -> Result<FormatsResult, String> {
             _ => "audio only".to_string(),
         });
 
-        let description = build_description(&f, is_video, is_audio);
+        let mut description = build_description(&f, is_video, is_audio);
+        // language_preference >= 5 is yt-dlp/YouTube's way of marking a track
+        // as the creator's chosen default/original for its language.
+        let is_default_audio = f.language_preference.map(|p| p >= 5).unwrap_or(false);
+        if is_audio {
+            if let Some(lang) = f.language.as_deref().filter(|l| !l.is_empty()) {
+                description.push_str(&format!(", [{lang}]"));
+            }
+            if is_default_audio {
+                description.push_str(" (default)");
+            }
+        }
 
         let format = Format {
             id: f.format_id.clone(),
@@ -265,6 +296,8 @@ async fn fetch_formats(url: String) -> Result<FormatsResult, String> {
             description,
             is_video,
             is_audio,
+            language: f.language.clone(),
+            is_default_audio,
         };
 
         if is_video {
