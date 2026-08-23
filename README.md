@@ -31,6 +31,12 @@ git clone https://github.com/KwisatzJim/ytdlprustygui
 cd ytdlprustygui-tauri
 ```
 
+```
+cargo tauri build
+```
+
+app will then be found in ytdlprustygui-tauri/src-tauri/target/release/bundle/
+
 <img width="1012" height="812" alt="1 initial scren" src="https://github.com/user-attachments/assets/e5d0b97d-62ba-4c91-b776-6f4450e819aa" />
 
 <img width="1012" height="812" alt="2 fetched formats" src="https://github.com/user-attachments/assets/c8097e87-eb49-4f8d-b711-c8b8e417463e" />
@@ -39,9 +45,3 @@ cd ytdlprustygui-tauri
 
 <img width="968" height="768" alt="4 download complete" src="https://github.com/user-attachments/assets/11b4ec1b-b087-4c8f-94fd-4f7bbc1d677b" />
 
-
-```
-cargo tauri build
-```
-
-app will then be found in ytdlprustygui-tauri/src-tauri/target/release/bundle/
