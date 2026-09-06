@@ -2,12 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>YT-DLP Rusty GUI</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main>
-    <h1>YT-DLP Rusty GUI</h1>
+    <header>
+      <div><h1>YT-DLP Rusty GUI</h1><p class="subtitle">Your videos. Your quality. Your folder.</p></div>
+      <div class="theme-control"><label for="theme">Appearance</label>
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </div>
+    </header>
+    <div class="panel">
+    <h2>Download destination</h2>
 
     <section class="row">
       <label for="url">URL</label>
@@ -19,6 +27,30 @@
       <label for="output-dir">Output Directory</label>
       <input id="output-dir" type="text" />
       <button id="browse-btn">Browse</button>
+    </section>
+
+    </div>
+    <div class="panel">
+    <h2>Quality &amp; preferences</h2>
+    <section class="row">
+      <label for="preferred-video-resolution">Preferred Video Resolution</label>
+      <select id="preferred-video-resolution" title="Selects the highest available resolution at or below your preference. If all are higher, selects the lowest available. You can override the selection below.">
+        <option value="">Best available</option>
+        <option value="2160">2160p (4K)</option>
+        <option value="1440">1440p</option>
+        <option value="1080">1080p (Full HD)</option>
+        <option value="720">720p (HD)</option>
+        <option value="480">480p</option>
+        <option value="360">360p</option>
+      </select>
+    </section>
+
+    <section class="row">
+      <label for="preferred-audio-quality">Preferred Audio Quality</label>
+      <select id="preferred-audio-quality" title="Selects higher or lower ranked audio within your language preference for video downloads. For MP3, controls conversion quality using the best available source.">
+        <option value="high">High (default)</option>
+        <option value="low">Low</option>
+      </select>
     </section>
 
     <section class="row">
@@ -48,7 +80,9 @@
       </select>
     </section>
 
-    <section class="row">
+    </div>
+    <div class="panel">
+    <section class="row" role="group" aria-label="Download type">
       <label>Download Type</label>
       <label class="radio">
         <input type="radio" name="download-type" value="video_audio" checked />
@@ -78,20 +112,22 @@
 
     <section class="row">
       <button id="download-btn">Download</button>
+      <button id="cancel-btn" style="display:none" disabled>Cancel Download</button>
       <span id="spinner" class="spinner" style="display:none"></span>
     </section>
 
-    <section class="row">
+    <section class="row status-row" role="status" aria-live="polite">
       <strong>Status:</strong>
       <span id="status">Checking yt-dlp...</span>
     </section>
 
+    </div>
     <section id="format-lists" style="display:none">
-      <details open>
+      <details>
         <summary>Available Video Formats</summary>
         <div id="video-format-table"></div>
       </details>
-      <details open>
+      <details>
         <summary>Available Audio Formats</summary>
         <div id="audio-format-table"></div>
       </details>
@@ -99,5 +135,6 @@
   </main>
 
   <script src="main.js"></script>
+  <script src="window-size.js"></script>
 </body>
 </html>

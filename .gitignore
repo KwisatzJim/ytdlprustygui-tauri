@@ -1,0 +1,5 @@
+# Generated Rust/Tauri builds and installers
+/target/
+
+# macOS folder metadata
+.DS_Store

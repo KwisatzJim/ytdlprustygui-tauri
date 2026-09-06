@@ -5,6 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-size",
     "dialog:default",
     "clipboard-manager:allow-read-text"
   ]

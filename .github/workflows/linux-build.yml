@@ -1,0 +1,94 @@
+name: Linux AppImage candidate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/linux-release]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+      APPIMAGE_EXTRACT_AND_RUN: '1'
+      LINUXDEPLOY_EXCLUDED_LIBRARIES: 'libwayland-client.so*'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev \
+            libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+            libfuse2 patchelf
+      - name: Set up Rust and Tauri CLI
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo install tauri-cli --version '=2.11.4' --locked
+      - name: Test
+        run: |
+          cargo test --locked --lib
+          node --test tests/*.test.cjs
+          node --check frontend/main.js
+          node --check frontend/window-size.js
+          git diff --check
+      - name: Build AppImage
+        run: cargo tauri build --bundles appimage -- --locked
+      - name: Inspect and package candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          images=(target/release/bundle/appimage/*.AppImage)
+          if (( ${#images[@]} != 1 )); then
+            echo 'Expected exactly one newly built AppImage.' >&2
+            exit 1
+          fi
+          image=$(realpath "${images[0]}")
+          inspection=$(mktemp -d)
+          (
+            cd "$inspection"
+            "$image" --appimage-extract > /dev/null
+          )
+          test -x "$inspection/squashfs-root/AppRun"
+          conflict=$(find "$inspection/squashfs-root" -name 'libwayland-client.so*' -print -quit)
+          if [[ -n "$conflict" ]]; then
+            echo "Bundled Wayland client must be resolved before testing: $conflict" >&2
+            exit 1
+          fi
+          mkdir -p linux-candidate
+          cp "$image" linux-candidate/
+          cp docs/LINUX_RELEASE.md linux-candidate/TESTING.md
+          {
+            git rev-parse HEAD
+            uname -m
+            cat /etc/os-release
+            rustc --version
+            cargo tauri --version
+          } > linux-candidate/BUILD-INFO.txt
+          (
+            cd linux-candidate
+            sha256sum -- *.AppImage > SHA256SUMS
+          )
+          tar -czf linux-candidate.tar.gz -C linux-candidate .
+      - name: Upload candidate for manual testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: rusty-gui-linux-x86_64-${{ github.sha }}
+          path: linux-candidate.tar.gz
+          if-no-files-found: error
+          retention-days: 14

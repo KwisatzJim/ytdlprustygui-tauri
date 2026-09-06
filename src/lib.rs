@@ -1,9 +1,29 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use tauri::Manager;
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum AudioQuality {
+    #[default]
+    High,
+    Low,
+}
+
+impl AudioQuality {
+    fn mp3_quality(self) -> &'static str {
+        match self {
+            Self::High => "0",
+            Self::Low => "9",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct AppConfig {
+    #[serde(default)]
+    theme: Theme,
     #[serde(default)]
     output_dir: String,
     /// BCP-47-ish language code (e.g. "en", "es", "ja") used to auto-pick an
@@ -12,6 +32,19 @@ struct AppConfig {
     /// as the default/original track.
     #[serde(default)]
     preferred_audio_language: Option<String>,
+    #[serde(default)]
+    preferred_video_resolution: Option<u32>,
+    #[serde(default)]
+    preferred_audio_quality: AudioQuality,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum Theme {
+    #[default]
+    System,
+    Light,
+    Dark,
 }
 
 fn config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -315,6 +348,174 @@ async fn fetch_formats(url: String) -> Result<FormatsResult, String> {
     Ok(FormatsResult { video, audio })
 }
 
+// Drain both pipes while yt-dlp runs, retaining only a short diagnostic tail.
+// Progress can be written to either pipe, depending on yt-dlp's configuration.
+async fn read_download_output(
+    reader: impl AsyncRead + Unpin,
+    on_progress: &impl Fn(String),
+) -> Result<String, String> {
+    let mut lines = BufReader::new(reader).split(b'\n');
+    let mut tail = std::collections::VecDeque::new();
+    while let Some(bytes) = lines.next_segment().await
+        .map_err(|e| format!("Failed to read download output: {e}"))? {
+        let line = String::from_utf8_lossy(&bytes).trim().to_string();
+        if line.is_empty() { continue; }
+        if ["[download]", "[Merger]", "[ExtractAudio]", "[VideoRemuxer]", "[Fixup"]
+            .iter().any(|prefix| line.starts_with(prefix)) {
+            on_progress(line.chars().take(2000).collect());
+        }
+        tail.push_back(line.chars().take(2000).collect::<String>());
+        if tail.len() > 20 { tail.pop_front(); }
+    }
+    Ok(tail.into_iter().collect::<Vec<_>>().join("\n"))
+}
+
+#[derive(Default)]
+struct DownloadState(std::sync::Mutex<Option<ActiveDownload>>);
+
+struct ActiveDownload {
+    id: String,
+    cancel: Option<tokio::sync::oneshot::Sender<()>>,
+}
+
+// Release the active slot on success, cancellation, or any error.
+struct DownloadGuard<'a>(&'a DownloadState);
+
+impl Drop for DownloadGuard<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut active) = self.0.0.lock() { *active = None; }
+    }
+}
+
+impl DownloadState {
+    fn begin(&self, id: String) -> Result<(DownloadGuard<'_>, tokio::sync::oneshot::Receiver<()>), String> {
+        let mut active = self.0.lock().map_err(|_| "Download state is unavailable")?;
+        if active.is_some() { return Err("A download is already running".into()); }
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        *active = Some(ActiveDownload { id, cancel: Some(sender) });
+        Ok((DownloadGuard(self), receiver))
+    }
+
+    fn cancel(&self, id: &str) -> Result<bool, String> {
+        let mut active = self.0.lock().map_err(|_| "Download state is unavailable")?;
+        let Some(download) = active.as_mut().filter(|download| download.id == id) else {
+            return Ok(false);
+        };
+        if let Some(sender) = download.cancel.take() { let _ = sender.send(()); }
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+fn cancel_download(download_id: String, downloads: tauri::State<'_, DownloadState>) -> Result<bool, String> {
+    downloads.cancel(&download_id)
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum DownloadOutcome { Completed, Cancelled }
+
+async fn stop_download_tree(pid: u32) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        let group = i32::try_from(pid).map_err(|_| "Invalid download process ID")?;
+        if group <= 1 { return Err("Invalid download process group".into()); }
+        // SAFETY: this is the positive PID returned by spawn for our own child,
+        // made leader of a separate group below. A negative PID targets that group.
+        if unsafe { libc::kill(-group, libc::SIGKILL) } != 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::ESRCH) {
+                return Err(format!("Could not stop download: {error}"));
+            }
+        }
+        Ok(())
+    }
+    #[cfg(windows)]
+    {
+        let system_root = std::env::var_os("SystemRoot").ok_or("Windows system directory is unavailable")?;
+        let output = tokio::process::Command::new(std::path::PathBuf::from(system_root).join("System32/taskkill.exe"))
+            .args(["/PID", &pid.to_string(), "/T", "/F"])
+            .output().await.map_err(|e| format!("Could not stop download: {e}"))?;
+        if output.status.success() { Ok(()) } else {
+            Err(format!("Could not stop download: {}", String::from_utf8_lossy(&output.stderr)))
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    { let _ = pid; Err("Cancellation is not supported on this platform".into()) }
+}
+
+async fn run_download(
+    mut cmd: tokio::process::Command,
+    on_progress: impl Fn(String),
+    cancel: tokio::sync::oneshot::Receiver<()>,
+) -> Result<DownloadOutcome, String> {
+    #[cfg(unix)]
+    cmd.process_group(0);
+    let mut child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|e| format!("Failed to execute yt-dlp: {e}"))?;
+    let pid = child.id().ok_or("Download process ID is unavailable")?;
+    on_progress("Starting download...".into());
+    let stdout = child.stdout.take().ok_or("Download output pipe is unavailable")?;
+    let stderr = child.stderr.take().ok_or("Download error pipe is unavailable")?;
+    let finished = tokio::select! {
+        biased;
+        output = async { tokio::join!(
+            read_download_output(stdout, &on_progress),
+            read_download_output(stderr, &on_progress),
+            child.wait(),
+        ) } => Some(output),
+        _ = async {
+            // Dropping a sender is not a request to cancel.
+            if cancel.await.is_err() { std::future::pending::<()>().await; }
+        } => None,
+    };
+    let Some((stdout, stderr, status)) = finished else {
+        stop_download_tree(pid).await?;
+        child.wait().await.map_err(|e| format!("Failed to finish cancellation: {e}"))?;
+        return Ok(DownloadOutcome::Cancelled);
+    };
+    let status = status.map_err(|e| format!("Failed to wait for yt-dlp: {e}"))?;
+    let stdout = stdout?;
+    let stderr = stderr?;
+    if status.success() {
+        Ok(DownloadOutcome::Completed)
+    } else {
+        let details = if stderr.is_empty() { stdout } else { stderr };
+        Err(format!("Download failed ({status}): {details}"))
+    }
+}
+
+async fn check_media_tool(name: &str, mut command: tokio::process::Command) -> Result<(), String> {
+    command.strip_appimage_env().arg("-version").kill_on_drop(true);
+    let output = tokio::time::timeout(std::time::Duration::from_secs(5), command.output())
+        .await.map_err(|_| format!("{name} did not respond within 5 seconds. Check its installation and try again."))?
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                format!("{name} was not found. Install FFmpeg (including ffprobe) and make sure both programs are on your PATH, then try again.")
+            } else {
+                format!("Could not start {name}: {e}. Check its installation and permissions.")
+            }
+        })?;
+    if !output.status.success() {
+        let details = String::from_utf8_lossy(&output.stderr).chars().take(1000).collect::<String>();
+        return Err(format!("{name} failed its version check ({}). Check its installation. {details}", output.status));
+    }
+    Ok(())
+}
+
+async fn check_media_tools() -> Result<(), String> {
+    let (ffmpeg, ffprobe) = tokio::join!(
+        check_media_tool("FFmpeg", tokio::process::Command::new("ffmpeg")),
+        check_media_tool("FFprobe", tokio::process::Command::new("ffprobe")),
+    );
+    let errors: Vec<_> = [ffmpeg, ffprobe].into_iter().filter_map(Result::err).collect();
+    if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
+}
+
 #[tauri::command]
 async fn download(
     url: String,
@@ -322,7 +523,11 @@ async fn download(
     download_type: String, // "video_audio" | "audio_only"
     video_format: Option<String>,
     audio_format: Option<String>,
-) -> Result<(), String> {
+    audio_quality: Option<AudioQuality>,
+    on_progress: tauri::ipc::Channel<String>,
+    download_id: String,
+    downloads: tauri::State<'_, DownloadState>,
+) -> Result<DownloadOutcome, String> {
     let url = url.trim().to_string();
     let output_dir = output_dir.trim().to_string();
 
@@ -335,6 +540,7 @@ async fn download(
 
     let mut cmd = tokio::process::Command::new("yt-dlp");
     cmd.strip_appimage_env();
+    cmd.args(["--newline", "--progress", "--no-colors"]);
 
     match download_type.as_str() {
         "video_audio" => {
@@ -344,6 +550,8 @@ async fn download(
                 return Err("Please fetch and select both video and audio formats".into());
             }
             cmd.args([
+                // Match fetch_formats: these format IDs belong to one video.
+                "--no-playlist",
                 "-f",
                 &format!("{vf}+{af}"),
                 "-o",
@@ -355,9 +563,13 @@ async fn download(
         }
         "audio_only" => {
             cmd.args([
+                "-f",
+                "bestaudio/best",
                 "-x",
                 "--audio-format",
                 "mp3",
+                "--audio-quality",
+                audio_quality.unwrap_or_default().mp3_quality(),
                 "-o",
                 &format!("{output_dir}/%(title)s.%(ext)s"),
                 &url,
@@ -366,19 +578,9 @@ async fn download(
         other => return Err(format!("Unknown download type: {other}")),
     }
 
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| format!("Failed to execute yt-dlp: {e}"))?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(format!(
-            "Download failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ))
-    }
+    check_media_tools().await?;
+    let (_guard, cancel) = downloads.begin(download_id)?;
+    run_download(cmd, |message| { let _ = on_progress.send(message); }, cancel).await
 }
 
 /// GUI apps on macOS are launched by launchd, not by the user's shell, so they
@@ -422,15 +624,175 @@ pub fn run() {
     fix_path_env();
 
     tauri::Builder::default()
+        .manage(DownloadState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             check_ytdlp,
             fetch_formats,
             download,
+            cancel_download,
             load_config,
             save_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AppConfig, AudioQuality, Theme};
+
+    #[tokio::test]
+    async fn missing_media_tool_has_actionable_error() {
+        let missing = std::env::temp_dir().join("rustygui-nonexistent-tools").join("ffmpeg-not-installed");
+        let error = super::check_media_tool("FFmpeg", tokio::process::Command::new(missing)).await.unwrap_err();
+        assert!(error.contains("FFmpeg was not found"));
+        assert!(error.contains("PATH"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn media_tool_check_accepts_success_and_reports_failure() {
+        let mut good = tokio::process::Command::new("/bin/sh");
+        good.args(["-c", "exit 0"]);
+        assert!(super::check_media_tool("FFmpeg", good).await.is_ok());
+        let mut bad = tokio::process::Command::new("/bin/sh");
+        bad.args(["-c", "printf 'broken library' >&2; exit 1"]);
+        let error = super::check_media_tool("FFprobe", bad).await.unwrap_err();
+        assert!(error.contains("FFprobe failed its version check"));
+        assert!(error.contains("broken library"));
+    }
+
+    #[test]
+    fn cancellation_targets_only_the_current_download_and_releases_slot() {
+        let state = super::DownloadState::default();
+        let (guard, mut receiver) = state.begin("first".into()).unwrap();
+        assert!(state.begin("second".into()).is_err());
+        assert!(!state.cancel("old").unwrap());
+        assert!(receiver.try_recv().is_err());
+        assert!(state.cancel("first").unwrap());
+        assert!(receiver.try_recv().is_ok());
+        assert!(state.cancel("first").unwrap());
+        drop(guard);
+        let (_guard, mut receiver) = state.begin("second".into()).unwrap();
+        assert!(!state.cancel("first").unwrap());
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn cancellation_stops_the_downloader_and_its_child() {
+        let mut cmd = tokio::process::Command::new("/bin/sh");
+        cmd.args(["-c", "sleep 30 & child=$!; printf '[download] child:%s\\n' \"$child\"; wait"]);
+        let (sender, cancel) = tokio::sync::oneshot::channel();
+        let sender = std::sync::Mutex::new(Some(sender));
+        let child_pid = std::sync::Mutex::new(None);
+        let running = super::run_download(cmd, |line| {
+            if let Some(pid) = line.strip_prefix("[download] child:") {
+                *child_pid.lock().unwrap() = Some(pid.parse::<u32>().unwrap());
+                sender.lock().unwrap().take().unwrap().send(()).unwrap();
+            }
+        }, cancel);
+        let outcome = tokio::time::timeout(std::time::Duration::from_secs(5), running)
+            .await.expect("cancellation should finish promptly").unwrap();
+        assert_eq!(outcome, super::DownloadOutcome::Cancelled);
+        let pid = child_pid.lock().unwrap().unwrap();
+        // A killed orphan can briefly remain as a zombie until the OS reaps it.
+        let stopped = async {
+            loop {
+                let status = tokio::process::Command::new("/bin/ps")
+                    .args(["-p", &pid.to_string(), "-o", "stat="]).output().await.unwrap();
+                let state = String::from_utf8_lossy(&status.stdout);
+                if !status.status.success() || state.trim().starts_with('Z') { break; }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(2), stopped)
+            .await.expect("conversion child must also stop");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn ordinary_completion_is_not_cancellation() {
+        let mut cmd = tokio::process::Command::new("/bin/sh");
+        cmd.args(["-c", "exit 0"]);
+        let (_sender, receiver) = tokio::sync::oneshot::channel();
+        assert_eq!(super::run_download(cmd, |_| {}, receiver).await.unwrap(), super::DownloadOutcome::Completed);
+    }
+
+    #[tokio::test]
+    async fn progress_arrives_before_output_closes() {
+        use tokio::io::AsyncWriteExt;
+        let (mut writer, reader) = tokio::io::duplex(256);
+        let (sent, received) = tokio::sync::oneshot::channel();
+        let sent = std::cell::RefCell::new(Some(sent));
+        let callback = |line: String| {
+            assert_eq!(line, "[download] 25% at 2MiB/s");
+            sent.borrow_mut().take().unwrap().send(()).unwrap();
+        };
+        let producer = async {
+            writer.write_all(b"[download] 25% at 2MiB/s\n").await.unwrap();
+            // The reader must send progress before EOF, not buffer until exit.
+            received.await.unwrap();
+            writer.shutdown().await.unwrap();
+        };
+        let (output, _) = tokio::join!(super::read_download_output(reader, &callback), producer);
+        assert!(output.unwrap().contains("25%"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn downloader_drains_both_pipes_and_preserves_failure() {
+        let mut cmd = tokio::process::Command::new("/bin/sh");
+        cmd.args(["-c", "printf '[download] 50%%\\n'; printf '[ExtractAudio] converting\\nERROR: conversion failed\\n' >&2; exit 1"]);
+        let progress = std::sync::Mutex::new(Vec::new());
+        let (_sender, cancel) = tokio::sync::oneshot::channel();
+        let result = super::run_download(cmd, |line| progress.lock().unwrap().push(line), cancel).await;
+        assert!(result.unwrap_err().contains("conversion failed"));
+        let messages = progress.lock().unwrap();
+        assert!(messages.iter().any(|line| line.contains("50%")));
+        assert!(messages.iter().any(|line| line.contains("ExtractAudio")));
+    }
+
+    #[tokio::test]
+    async fn diagnostics_are_bounded_and_non_utf8_is_tolerated() {
+        let mut data = (0..100).map(|i| format!("line {i}\n")).collect::<String>().into_bytes();
+        data.extend_from_slice(b"invalid: \xff\n");
+        let output = super::read_download_output(data.as_slice(), &|_| {}).await.unwrap();
+        assert_eq!(output.lines().count(), 20);
+        assert!(output.contains("line 99"));
+        assert!(output.contains("invalid:"));
+    }
+
+    #[test]
+    fn audio_quality_defaults_and_persistence() {
+        let mut config: AppConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.preferred_audio_quality, AudioQuality::High);
+        config.preferred_audio_quality = AudioQuality::Low;
+        let restored: AppConfig = serde_json::from_str(
+            &serde_json::to_string(&config).unwrap(),
+        ).unwrap();
+        assert_eq!(restored.preferred_audio_quality, AudioQuality::Low);
+        assert_eq!(AudioQuality::High.mp3_quality(), "0");
+        assert_eq!(AudioQuality::Low.mp3_quality(), "9");
+        assert!(serde_json::from_str::<AudioQuality>("\"invalid\"").is_err());
+    }
+
+    #[test]
+    fn resolution_preference_is_backward_compatible_and_round_trips() {
+        let mut config: AppConfig = serde_json::from_str(
+            r#"{"output_dir":"/tmp/videos","preferred_audio_language":"en"}"#,
+        ).unwrap();
+        assert_eq!(config.preferred_video_resolution, None);
+        assert_eq!(config.theme, Theme::System);
+        config.theme = Theme::Dark;
+        config.preferred_video_resolution = Some(1080);
+        let saved = serde_json::to_string(&config).unwrap();
+        let restored: AppConfig = serde_json::from_str(&saved).unwrap();
+        assert_eq!(restored.preferred_video_resolution, Some(1080));
+        assert_eq!(restored.theme, Theme::Dark);
+        assert_eq!(restored.output_dir, "/tmp/videos");
+        assert_eq!(restored.preferred_audio_language.as_deref(), Some("en"));
+    }
 }
