@@ -28,6 +28,7 @@ header { display: flex; justify-content: space-between; align-items: center; gap
 h1 { font-size: 23px; letter-spacing: -.5px; margin: 0; }
 h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 0 0 16px; }
 .subtitle { margin: 4px 0 0; color: var(--muted); }
+.hint { margin: -6px 0 14px 200px; color: var(--muted); font-size: 13px; }
 .theme-control { display: flex; align-items: center; gap: 10px; }
 .theme-control select { min-width: 100px; }
 .panel, details { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
@@ -68,4 +69,5 @@ th { color: var(--muted); font-weight: 600; }
   header, .row { flex-wrap: wrap; }
   .row > label:first-child:not(.radio) { flex-basis: 100%; }
   .radio { flex: 1 0 auto; }
+  .hint { margin-left: 0; }
 }

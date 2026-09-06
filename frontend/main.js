@@ -151,6 +151,7 @@ function invalidateFormats() {
 function updateDownloadTypeUI() {
   const type = document.querySelector('input[name="download-type"]:checked').value;
   const showFormats = type === "video_audio";
+  document.getElementById("playlist-note").hidden = showFormats;
   document.getElementById("fetch-btn").parentElement.style.display =
     showFormats ? "flex" : "none";
   document.getElementById("video-format-row").style.display =

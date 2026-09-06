@@ -79,7 +79,7 @@ Changing the URL clears previously fetched formats. Format tables start collapse
 
 Video format fetching accepts single videos and rejects playlist-only URLs. When a video URL also contains playlist parameters, Video+Audio fetches formats and downloads only that video.
 
-Audio-only mode passes the URL to yt-dlp and can process playlists, but there is no playlist selection or queue interface. Playlist behavior still needs dedicated release testing.
+Audio-only mode passes the URL to yt-dlp and processes every playlist item as a separate MP3. This behavior was verified in simulation against a two-item YouTube playlist. The app displays a reminder when Audio Only is selected, but it does not provide playlist selection or a queue interface.
 
 ## Development checks
 

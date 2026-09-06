@@ -35,6 +35,15 @@ function setup(downloadResult, cancelResult) {
 }
 const formats = { video: [{ id: '137', resolution: '1920x1080' }], audio: [{ id: '140' }] };
 
+test('audio-only mode explains that playlist URLs download every item', () => {
+  const app = setup();
+  assert.equal(app.element('playlist-note').hidden, undefined);
+  app.run(`document.querySelector = () => ({ value: 'audio_only' }); updateDownloadTypeUI()`);
+  assert.equal(app.element('playlist-note').hidden, false);
+  app.run(`document.querySelector = () => ({ value: 'video_audio' }); updateDownloadTypeUI()`);
+  assert.equal(app.element('playlist-note').hidden, true);
+});
+
 test('URL editing clears loaded formats and prevents a stale download', async () => {
   const app = setup();
   const fetching = app.run('fetchFormats()');
