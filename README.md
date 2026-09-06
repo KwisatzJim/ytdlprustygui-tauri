@@ -98,7 +98,7 @@ Rust tests include a simulated downloader and cancellation of its child process 
 
 The app targets macOS and Linux. The GUI has been tested interactively on macOS, and the x86-64 AppImage has been built on Ubuntu and manually verified on Linux. Its bundled-library audit verified 178 libraries with none unresolved. Windows packages are not planned. Release notes should identify the platforms tested and how each installer is signed.
 
-Download the current packages from [YT-DLP Rusty GUI 0.2.1](https://github.com/KwisatzJim/ytdlprustygui-tauri/releases/tag/v0.2.1).
+Download the current packages from [YT-DLP Rusty GUI 0.2.2](https://github.com/KwisatzJim/ytdlprustygui-tauri/releases/tag/v0.2.2).
 
 See [macOS release verification and installation](docs/MACOS_RELEASE.md) for the local Apple-silicon candidate and its signing status.
 
