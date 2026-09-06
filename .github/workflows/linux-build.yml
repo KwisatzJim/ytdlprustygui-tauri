@@ -67,8 +67,27 @@ jobs:
           test -x "$inspection/squashfs-root/AppRun"
           conflict=$(find "$inspection/squashfs-root" -name 'libwayland-client.so*' -print -quit)
           if [[ -n "$conflict" ]]; then
-            echo "Bundled Wayland client must be resolved before testing: $conflict" >&2
-            exit 1
+            echo "Removing bundled Wayland client: $conflict"
+            find "$inspection/squashfs-root" -name 'libwayland-client.so*' -delete
+            tool="$RUNNER_TEMP/appimagetool.AppImage"
+            wget --https-only --secure-protocol=TLSv1_2 \
+              -O "$tool" \
+              https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+            chmod 700 "$tool"
+            rebuilt="$RUNNER_TEMP/$(basename "$image")"
+            ARCH=x86_64 "$tool" --appimage-extract-and-run \
+              "$inspection/squashfs-root" "$rebuilt"
+            mv "$rebuilt" "$image"
+            verify=$(mktemp -d)
+            (
+              cd "$verify"
+              "$image" --appimage-extract > /dev/null
+            )
+            test -x "$verify/squashfs-root/AppRun"
+            if find "$verify/squashfs-root" -name 'libwayland-client.so*' -print -quit | grep -q .; then
+              echo 'Rebuilt AppImage still bundles the Wayland client.' >&2
+              exit 1
+            fi
           fi
           mkdir -p linux-candidate
           cp "$image" linux-candidate/
