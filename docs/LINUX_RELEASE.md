@@ -30,7 +30,7 @@ After installing the prerequisites, run this from the repository root:
 ./scripts/build-linux-appimage.sh
 ```
 
-The script runs the Rust and JavaScript checks, builds the AppImage, removes the incompatible bundled Wayland client library if necessary, reinspects the result, and creates `target/release/bundle/appimage/linux-candidate.tar.gz`.
+The script runs the Rust and JavaScript checks, builds the AppImage, removes the incompatible bundled Wayland client library if necessary, packages and verifies the Debian copyright notice for every bundled ELF library, reinspects the result, and creates `target/release/bundle/appimage/linux-candidate.tar.gz`.
 
 Unpack that archive on Linux. The tar archive preserves the AppImage's executable permission. In the extracted folder, run:
 
@@ -40,4 +40,4 @@ sha256sum -c SHA256SUMS
 
 Then open the AppImage on your Linux desktop. Install yt-dlp, FFmpeg, and FFprobe separately. If the desktop cannot mount AppImages, use the AppImage runtime's `--appimage-extract-and-run` option from a terminal.
 
-The build script checks tests, packaging, and the absence of the bundled Wayland client. If a check fails, stop and fix the package before distributing it. Library-license review and real desktop testing remain release requirements.
+The build script checks tests, packaging, the absence of the bundled Wayland client, and library copyright notices. It fails closed if a bundled library cannot be matched exactly to an installed Debian package by ELF build ID. Review `appimage-license-audit.txt` and test the real desktop application before distributing it.

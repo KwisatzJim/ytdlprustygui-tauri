@@ -7,6 +7,8 @@ cd "$repo_root"
 command -v cargo >/dev/null || { echo "cargo is required" >&2; exit 1; }
 command -v node >/dev/null || { echo "node is required for JavaScript tests" >&2; exit 1; }
 command -v wget >/dev/null || { echo "wget is required to repair the AppImage bundle" >&2; exit 1; }
+test -x /usr/bin/readelf || { echo "binutils is required for the library license audit" >&2; exit 1; }
+test -x /usr/bin/dpkg-query || { echo "this build script requires Ubuntu or Debian" >&2; exit 1; }
 
 cargo test --locked --lib
 node --test tests/*.test.cjs
@@ -36,14 +38,16 @@ test -x "$work_dir/squashfs-root/AppRun"
 
 if find "$work_dir/squashfs-root" -name 'libwayland-client.so*' -print -quit | grep -q .; then
   find "$work_dir/squashfs-root" -name 'libwayland-client.so*' -delete
-  appimagetool="$work_dir/appimagetool.AppImage"
-  wget --https-only --secure-protocol=TLSv1_2 -O "$appimagetool" \
-    https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
-  chmod 700 "$appimagetool"
-  ARCH=x86_64 "$appimagetool" --appimage-extract-and-run \
-    "$work_dir/squashfs-root" "$work_dir/rebuilt.AppImage"
-  mv "$work_dir/rebuilt.AppImage" "$image"
 fi
+
+node scripts/audit-appimage-licenses.mjs install "$work_dir/squashfs-root"
+appimagetool="$work_dir/appimagetool.AppImage"
+wget --https-only --secure-protocol=TLSv1_2 -O "$appimagetool" \
+  https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+chmod 700 "$appimagetool"
+ARCH=x86_64 "$appimagetool" --appimage-extract-and-run \
+  "$work_dir/squashfs-root" "$work_dir/rebuilt.AppImage"
+mv "$work_dir/rebuilt.AppImage" "$image"
 
 verify_dir="$work_dir/verify"
 mkdir "$verify_dir"
@@ -56,11 +60,13 @@ if find "$verify_dir/squashfs-root" -name 'libwayland-client.so*' -print -quit |
   echo 'Final AppImage still bundles libwayland-client.' >&2
   exit 1
 fi
+node scripts/audit-appimage-licenses.mjs audit "$verify_dir/squashfs-root"
 
 candidate_dir=target/release/bundle/appimage/linux-candidate
 mkdir -p "$candidate_dir"
 cp "$image" "$candidate_dir/"
 cp docs/LINUX_RELEASE.md "$candidate_dir/TESTING.md"
+cp "$verify_dir/appimage-license-audit.txt" "$candidate_dir/"
 {
   git rev-parse HEAD
   uname -m
