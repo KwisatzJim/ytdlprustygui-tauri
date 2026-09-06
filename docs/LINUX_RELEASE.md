@@ -1,6 +1,6 @@
 # Linux release preparation
 
-Status: the x86-64 AppImage has been built on Ubuntu and manually tested successfully. The Ubuntu-server build verified copyright notices for all 178 bundled ELF libraries with 0 unresolved libraries. Future Linux candidates are built on the project's Ubuntu server.
+Status: the x86-64 AppImage has been built on Ubuntu and manually tested successfully. The Ubuntu-server build verified copyright notices for all 178 bundled ELF libraries with 0 unresolved libraries. Version 0.2.1 is published on GitHub. Future Linux candidates are built on the project's Ubuntu server.
 
 Build on Linux, using the same CPU architecture as the intended users. For an x86-64 AppImage, Ubuntu 22.04 is a suitable starting baseline. Building on a newer distribution can make the result depend on libraries unavailable on older systems. See [Tauri's AppImage guidance](https://v2.tauri.app/distribute/appimage/).
 

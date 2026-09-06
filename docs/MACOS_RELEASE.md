@@ -30,4 +30,4 @@ Verified on 2026-09-06:
 - Tests: 19 JavaScript tests and 11 Rust tests passed.
 - SHA-256: `c27719fe80adb5f8de1a72a93eb03c505a07f53b127f4b395b083c04121c5cf5`.
 
-Packaged-app startup and interaction testing remain a manual step for this rebuilt version. The Linux x86-64 AppImage has separate verification; Intel macOS is not currently offered. This candidate has not been uploaded or published.
+Packaged-app startup and interaction testing remain a manual step for this rebuilt version. The Linux x86-64 AppImage has separate verification; Intel macOS is not currently offered. This candidate is published in the GitHub `v0.2.1` release.
