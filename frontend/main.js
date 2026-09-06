@@ -291,8 +291,8 @@ function selectBestAudioFormat() {
 }
 
 function renderFormatTables() {
-  renderTable("video-format-table", state.videoFormats, ["id", "extension", "resolution", "description"]);
-  renderTable("audio-format-table", state.audioFormats, ["id", "extension", "description"]);
+  renderTable("video-format-table", "Available video formats", state.videoFormats, ["id", "extension", "resolution", "description"]);
+  renderTable("audio-format-table", "Available audio formats", state.audioFormats, ["id", "extension", "description"]);
 }
 
 // Keep site-provided metadata as literal text inside the table markup.
@@ -301,14 +301,14 @@ function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => entities[character]);
 }
 
-function renderTable(containerId, formats, cols) {
+function renderTable(containerId, caption, formats, cols) {
   const container = document.getElementById(containerId);
   if (!formats.length) {
     container.innerHTML = "<p>None found.</p>";
     return;
   }
-  let html = "<table><thead><tr>";
-  html += cols.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+  let html = `<table><caption class="visually-hidden">${escapeHtml(caption)}</caption><thead><tr>`;
+  html += cols.map((c) => `<th scope="col">${escapeHtml(c)}</th>`).join("");
   html += "</tr></thead><tbody>";
   for (const f of formats) {
     html += "<tr>" + cols.map((c) => `<td>${escapeHtml(f[c])}</td>`).join("") + "</tr>";

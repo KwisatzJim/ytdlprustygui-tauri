@@ -165,7 +165,7 @@ test('audio quality is saved and passed to downloads without overriding manual f
 
 test('format tables display markup as text in every metadata column', () => {
   const app = setup();
-  app.run(`renderTable('video-format-table', [{
+  app.run(`renderTable('video-format-table', 'Video <formats>', [{
     id: '<b>137</b>', extension: 'a&b', resolution: '"quoted"',
     description: "<img src=x onerror='alert(1)'>"
   }], ['id', 'extension', 'resolution', 'description'])`);
@@ -176,6 +176,15 @@ test('format tables display markup as text in every metadata column', () => {
   assert.ok(html.includes('a&amp;b'));
   assert.ok(html.includes('&quot;quoted&quot;'));
   assert.ok(html.includes('&#39;alert(1)&#39;'));
+  assert.ok(html.includes('Video &lt;formats&gt;'));
+});
+
+test('format tables identify their purpose and column headers', () => {
+  const app = setup();
+  app.run(`state.videoFormats = [{ id: '137', extension: 'mp4', resolution: '1920x1080', description: 'video' }]; renderFormatTables()`);
+  const html = app.element('video-format-table').innerHTML;
+  assert.match(html, /<caption class="visually-hidden">Available video formats<\/caption>/);
+  assert.match(html, /<th scope="col">resolution<\/th>/);
 });
 
 test('live progress updates while downloading and late updates cannot overwrite completion', async () => {
