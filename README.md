@@ -96,9 +96,11 @@ Rust tests include a simulated downloader and cancellation of its child process 
 
 ## Distribution status
 
-Public installer preparation is in progress. The current GUI workflow has been tested interactively on macOS; Windows and Linux packaging and runtime checks remain to be completed. A successful local build alone does not establish cross-platform compatibility or signing/notarization status. Release notes should identify the platforms tested and how each installer is signed.
+The app targets macOS and Linux. The GUI has been tested interactively on macOS, and the x86-64 AppImage has been built on Ubuntu and manually verified on Linux. Windows packages are not planned. Release notes should identify the platforms tested and how each installer is signed.
 
 See [macOS release verification and installation](docs/MACOS_RELEASE.md) for the local Apple-silicon candidate and its signing status.
+
+See [Linux release preparation](docs/LINUX_RELEASE.md) for the Ubuntu-server build and verification process.
 
 ### Linux AppImage troubleshooting
 

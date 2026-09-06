@@ -1,6 +1,6 @@
 # Linux release preparation
 
-Status: no Linux package has been built or tested in this release pass.
+Status: the x86-64 AppImage has been built on Ubuntu and manually tested successfully. Future Linux candidates are built on the project's Ubuntu server.
 
 Build on Linux, using the same CPU architecture as the intended users. For an x86-64 AppImage, Ubuntu 22.04 is a suitable starting baseline. Building on a newer distribution can make the result depend on libraries unavailable on older systems. See [Tauri's AppImage guidance](https://v2.tauri.app/distribute/appimage/).
 
@@ -8,7 +8,7 @@ Build on Linux, using the same CPU architecture as the intended users. For an x8
 
 Install stable Rust, the Tauri 2 CLI, Node.js for the frontend tests, and the [Tauri Linux system dependencies](https://v2.tauri.app/start/prerequisites/#linux). The app also needs yt-dlp, FFmpeg, and FFprobe for hands-on download testing; see the main README for setup.
 
-Use the reviewed source including local fixes, not an older remote checkout. The selected build environment is GitHub Actions on Ubuntu 22.04, using the source commit chosen for the workflow run.
+Use the reviewed source including local fixes, not an older checkout. Build on the Ubuntu server from the exact source commit intended for release.
 
 ## Planned verification
 
@@ -22,11 +22,17 @@ Use the reviewed source including local fixes, not an older remote checkout. The
 
 A successful build is not yet evidence that the AppImage runs correctly on another distribution. Publish only the artifact that was tested.
 
-## Run the GitHub Actions build
+## Build on the Ubuntu server
 
-The first build runs when the source-only `codex/linux-release` branch is pushed. Once the workflow is on the default branch, it can also be run from **Actions → Linux AppImage candidate → Run workflow**. It has read-only repository permissions and does not create a GitHub release.
+After installing the prerequisites, run this from the repository root:
 
-Download the resulting `rusty-gui-linux-x86_64-...` artifact from the run page within 14 days. Unzip the artifact and unpack `linux-candidate.tar.gz` on Linux. The tar archive preserves the AppImage's executable permission. In the extracted folder, run:
+```sh
+./scripts/build-linux-appimage.sh
+```
+
+The script runs the Rust and JavaScript checks, builds the AppImage, removes the incompatible bundled Wayland client library if necessary, reinspects the result, and creates `target/release/bundle/appimage/linux-candidate.tar.gz`.
+
+Unpack that archive on Linux. The tar archive preserves the AppImage's executable permission. In the extracted folder, run:
 
 ```sh
 sha256sum -c SHA256SUMS
@@ -34,4 +40,4 @@ sha256sum -c SHA256SUMS
 
 Then open the AppImage on your Linux desktop. Install yt-dlp, FFmpeg, and FFprobe separately. If the desktop cannot mount AppImages, use the AppImage runtime's `--appimage-extract-and-run` option from a terminal.
 
-The workflow checks tests, packaging, and the absence of the bundled Wayland client. If that check fails, stop and fix the package before distributing it. Library-license review and real desktop testing remain release requirements; an Actions artifact is only a test candidate.
+The build script checks tests, packaging, and the absence of the bundled Wayland client. If a check fails, stop and fix the package before distributing it. Library-license review and real desktop testing remain release requirements.
