@@ -188,6 +188,39 @@ async fn check_dependencies() -> Vec<DependencyStatus> {
     vec![yt_dlp, ffmpeg, ffprobe]
 }
 
+fn existing_folder(path: &str) -> Result<std::path::PathBuf, String> {
+    let path = std::path::PathBuf::from(path.trim());
+    if path.as_os_str().is_empty() {
+        return Err("No download folder is available to open".into());
+    }
+    match fs::metadata(&path) {
+        Ok(metadata) if metadata.is_dir() => Ok(path),
+        Ok(_) => Err("The download location is not a folder".into()),
+        Err(error) => Err(format!("The download folder is unavailable: {error}")),
+    }
+}
+
+#[tauri::command]
+async fn open_output_folder(path: String) -> Result<(), String> {
+    let path = existing_folder(&path)?;
+    #[cfg(target_os = "macos")]
+    let mut command = tokio::process::Command::new("open");
+    #[cfg(target_os = "linux")]
+    let mut command = tokio::process::Command::new("xdg-open");
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    return Err("Opening the download folder is unsupported on this platform".into());
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        command.strip_appimage_env().arg(path);
+        let status = tokio::time::timeout(std::time::Duration::from_secs(5), command.status())
+            .await
+            .map_err(|_| "Opening the download folder timed out".to_string())?
+            .map_err(|error| format!("Could not open the download folder: {error}"))?;
+        if status.success() { Ok(()) } else { Err(format!("Could not open the download folder ({status})")) }
+    }
+}
+
 /// Checks that yt-dlp is installed and reachable on PATH. Called by the
 /// frontend on startup so we can show a clear error instead of failing
 /// silently on the first download attempt.
@@ -690,6 +723,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             check_ytdlp,
             check_dependencies,
+            open_output_folder,
             fetch_formats,
             download,
             cancel_download,
@@ -722,6 +756,13 @@ mod tests {
         assert_eq!(super::dependency_version_arg("yt-dlp"), "--version");
         assert_eq!(super::dependency_version_arg("ffmpeg"), "-version");
         assert_eq!(super::dependency_version_arg("ffprobe"), "-version");
+    }
+
+    #[test]
+    fn open_folder_requires_an_existing_directory() {
+        assert!(super::existing_folder("").is_err());
+        assert!(super::existing_folder("Cargo.toml").unwrap_err().contains("not a folder"));
+        assert_eq!(super::existing_folder(".").unwrap(), std::path::PathBuf::from("."));
     }
 
     #[tokio::test]

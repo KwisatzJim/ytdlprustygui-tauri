@@ -7,6 +7,7 @@ const state = {
   formatsRevision: 0,
   downloadSequence: 0,
   activeDownload: null,
+  completedOutputDir: null,
   // Mirrors the backend's AppConfig. save_config replaces the whole file, so
   // we keep the full object here and merge into it on every change instead
   // of sending single-field patches that would wipe out the other fields.
@@ -27,6 +28,7 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("fetch-btn").addEventListener("click", fetchFormats);
   document.getElementById("download-btn").addEventListener("click", startDownload);
   document.getElementById("cancel-btn").addEventListener("click", cancelDownload);
+  document.getElementById("open-folder-btn").addEventListener("click", openOutputFolder);
   document.getElementById("preferred-audio-quality").addEventListener("change", (e) => {
     saveConfig({ preferred_audio_quality: e.target.value });
     selectBestAudioFormat();
@@ -39,6 +41,8 @@ window.addEventListener("DOMContentLoaded", () => {
     .querySelectorAll('input[name="download-type"]')
     .forEach((el) => el.addEventListener("change", updateDownloadTypeUI));
   document.getElementById("output-dir").addEventListener("change", (e) => {
+    state.completedOutputDir = null;
+    document.getElementById("open-folder-btn").style.display = "none";
     saveConfig({ output_dir: e.target.value.trim() });
   });
   document.getElementById("preferred-audio-language").addEventListener("change", (e) => {
@@ -342,6 +346,8 @@ async function startDownload() {
   }
 
   setStatus("Checking download requirements...", "warn");
+  state.completedOutputDir = null;
+  document.getElementById("open-folder-btn").style.display = "none";
   setProcessing(true);
   const download = { id: String(++state.downloadSequence), cancelling: false };
   state.activeDownload = download;
@@ -372,6 +378,8 @@ async function startDownload() {
       setStatus("Download cancelled. Partial files were kept; you can retry the download.", "");
     } else {
       setStatus("Download completed successfully", "ok");
+      state.completedOutputDir = outputDir;
+      document.getElementById("open-folder-btn").style.display = "inline-block";
     }
   } catch (e) {
     setStatus(e, "err");
@@ -381,5 +389,14 @@ async function startDownload() {
     cancelButton.style.display = "none";
     cancelButton.disabled = true;
     setProcessing(false);
+  }
+}
+
+async function openOutputFolder() {
+  if (!state.completedOutputDir) return;
+  try {
+    await invoke("open_output_folder", { path: state.completedOutputDir });
+  } catch (error) {
+    setStatus(error, "err");
   }
 }

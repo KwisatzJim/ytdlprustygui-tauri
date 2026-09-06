@@ -70,7 +70,7 @@ The frontend is plain HTML, CSS, and JavaScript; no `npm install` or frontend bu
 1. Paste a video URL and choose an output folder.
 2. Set your quality preferences and download type.
 3. For **Video+Audio**, click **Fetch Formats**, then review or change the selected formats. For **Audio Only**, fetch is not required.
-4. Click **Download** and watch the status. Video and audio transfers may report separate percentages; merging or conversion can continue after a transfer reaches 100%.
+4. Click **Download** and watch the status. Video and audio transfers may report separate percentages; merging or conversion can continue after a transfer reaches 100%. After completion, use **Open Downloads Folder** to reveal the result.
 5. Use **Cancel Download** to stop an active download. Partial files remain; retrying the same URL, folder, and formats may resume the transfer where yt-dlp supports it.
 
 Changing the URL clears previously fetched formats. Format tables start collapsed and can be expanded for more detail. The window grows downward as controls appear, up to the available screen space; longer content remains scrollable.

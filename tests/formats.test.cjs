@@ -26,6 +26,7 @@ function setup(downloadResult, cancelResult, dependencies = []) {
       if (command === 'download') return downloadResult;
       if (command === 'cancel_download') return cancelResult;
       if (command === 'check_dependencies') return dependencies;
+      if (command === 'open_output_folder') return undefined;
       if (command === 'plugin:clipboard-manager|read_text') return 'https://example.com/b';
     } } }, addEventListener() {} },
     document: { getElementById: element, querySelector: () => ({ value: 'video_audio' }), createElement: () => ({}) },
@@ -56,6 +57,19 @@ test('dependency status uses text content and reports missing tools', async () =
   assert.equal(app.element('dependency-ffmpeg').textContent, 'FFmpeg: Missing');
   assert.equal(app.element('dependency-ffmpeg').title, '<missing>');
   assert.match(app.element('status').textContent, /FFmpeg/);
+});
+
+test('successful download offers to open the completed output folder', async () => {
+  const app = setup('completed');
+  app.element('output-dir').value = '/tmp/downloads';
+  app.run(`state.formatsUrl = 'https://example.com/a';
+    document.getElementById('video-format').value = '137';
+    document.getElementById('audio-format').value = '140'`);
+  await app.run('startDownload()');
+  assert.equal(app.element('open-folder-btn').style.display, 'inline-block');
+  await app.run('openOutputFolder()');
+  const call = app.calls.find(call => call.command === 'open_output_folder');
+  assert.equal(call.args.path, '/tmp/downloads');
 });
 
 test('URL editing clears loaded formats and prevents a stale download', async () => {
