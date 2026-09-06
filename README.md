@@ -30,7 +30,7 @@ ffmpeg -version
 ffprobe -version
 ```
 
-The app checks yt-dlp at startup and verifies that FFmpeg and FFprobe can run before each download. If either is missing or fails its check, the app explains what needs attention before fetching media. Each check has a five-second timeout.
+The app checks yt-dlp at startup and verifies that FFmpeg and FFprobe can run before each download. If either is missing or fails its check, the app explains what needs attention before fetching media. Each check has a five-second timeout. On macOS and Linux, the app reads your login-shell PATH at startup so desktop-launched builds can find Homebrew and other user-installed tools.
 
 ## Build and run
 

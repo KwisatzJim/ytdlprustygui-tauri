@@ -583,12 +583,16 @@ async fn download(
     run_download(cmd, |message| { let _ = on_progress.send(message); }, cancel).await
 }
 
-/// GUI apps on macOS are launched by launchd, not by the user's shell, so they
-/// inherit a minimal PATH (e.g. /usr/bin:/bin:/usr/sbin:/sbin) that doesn't
-/// include Homebrew's /opt/homebrew/bin. This runs the user's actual login
-/// shell once to capture their real PATH and applies it to this process, so
-/// `Command::new("yt-dlp")` can find it the same way a terminal would.
-#[cfg(target_os = "macos")]
+fn path_after_marker(output: &[u8], marker: &str) -> Option<String> {
+    let stdout = String::from_utf8_lossy(output);
+    let path = stdout.split(marker).nth(1)?.trim();
+    (!path.is_empty()).then(|| path.to_string())
+}
+
+/// Apps opened from a macOS or Linux desktop may not inherit the PATH created
+/// by the user's shell setup. Ask their login shell for it once so Homebrew and
+/// other user-installed tools are found just as they are in a terminal.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn fix_path_env() {
     use std::process::Command;
 
@@ -601,22 +605,18 @@ fn fix_path_env() {
 
     if let Ok(output) = output {
         if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if let Some(idx) = stdout.find(MARKER) {
-                let path = stdout[idx + MARKER.len()..].trim();
-                if !path.is_empty() {
-                    // SAFETY: called once, single-threaded, before the Tauri
-                    // runtime and any of its threads have started.
-                    unsafe {
-                        std::env::set_var("PATH", path);
-                    }
+            if let Some(path) = path_after_marker(&output.stdout, MARKER) {
+                // SAFETY: called once, single-threaded, before the Tauri
+                // runtime and any of its threads have started.
+                unsafe {
+                    std::env::set_var("PATH", path);
                 }
             }
         }
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn fix_path_env() {}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -642,6 +642,17 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{AppConfig, AudioQuality, Theme};
+
+    #[test]
+    fn login_shell_path_ignores_startup_noise() {
+        let output = b"shell greeting\n__RUSTYGUI_PATH_MARKER__/home/linuxbrew/.linuxbrew/bin:/usr/bin\n";
+        assert_eq!(
+            super::path_after_marker(output, "__RUSTYGUI_PATH_MARKER__").as_deref(),
+            Some("/home/linuxbrew/.linuxbrew/bin:/usr/bin")
+        );
+        assert!(super::path_after_marker(b"no marker", "marker").is_none());
+        assert!(super::path_after_marker(b"marker   ", "marker").is_none());
+    }
 
     #[tokio::test]
     async fn missing_media_tool_has_actionable_error() {
