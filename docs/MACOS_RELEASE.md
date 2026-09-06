@@ -22,12 +22,12 @@ Test the actual packaged app, not `cargo tauri dev`. A second Apple-silicon Mac 
 
 Verified on 2026-09-06:
 
-- Version: 0.2.0; architecture: arm64 (Apple silicon).
-- DMG: `target/release/bundle/dmg/YT-DLP Rusty GUI_0.2.0_aarch64.dmg` (about 3.1 MB).
+- Version: 0.2.1; architecture: arm64 (Apple silicon).
+- DMG: `target/release/bundle/dmg/YT-DLP Rusty GUI_0.2.1_aarch64.dmg`.
 - `hdiutil verify`: passed.
 - `codesign --verify --deep --strict --verbose=2`: passed for both the build output and the app mounted from the DMG.
 - Signature: ad hoc, with sealed resources and hardened runtime; no Developer ID or notarization.
-- Tests: 16 JavaScript tests and 10 Rust tests passed.
-- SHA-256: `284ec721163f8d70166ab8d35c4e91300e99ab723d23e434d535906acdcb882b`.
+- Tests: 19 JavaScript tests and 11 Rust tests passed.
+- SHA-256: `c27719fe80adb5f8de1a72a93eb03c505a07f53b127f4b395b083c04121c5cf5`.
 
-Packaged-app startup and interaction testing remain a manual step. Linux, Windows, and Intel macOS builds have not been verified in this release pass. This candidate has not been uploaded or published.
+Packaged-app startup and interaction testing remain a manual step for this rebuilt version. The Linux x86-64 AppImage has separate verification; Intel macOS is not currently offered. This candidate has not been uploaded or published.
