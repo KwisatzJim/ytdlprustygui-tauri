@@ -40,6 +40,8 @@ if find "$work_dir/squashfs-root" -name 'libwayland-client.so*' -print -quit | g
   find "$work_dir/squashfs-root" -name 'libwayland-client.so*' -delete
 fi
 
+install -Dm644 "packaging/linux/YT-DLP Rusty GUI.appdata.xml" \
+  "$work_dir/squashfs-root/usr/share/metainfo/YT-DLP Rusty GUI.appdata.xml"
 node scripts/audit-appimage-licenses.mjs install "$work_dir/squashfs-root"
 appimagetool="$work_dir/appimagetool.AppImage"
 wget --https-only --secure-protocol=TLSv1_2 -O "$appimagetool" \

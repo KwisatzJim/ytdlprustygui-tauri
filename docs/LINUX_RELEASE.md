@@ -30,7 +30,7 @@ After installing the prerequisites, run this from the repository root:
 ./scripts/build-linux-appimage.sh
 ```
 
-The script runs the Rust and JavaScript checks, builds the AppImage, removes the incompatible bundled Wayland client library if necessary, packages and verifies the Debian copyright notice for every bundled ELF library, reinspects the result, and creates `target/release/bundle/appimage/linux-candidate.tar.gz`.
+The script runs the Rust and JavaScript checks, builds the AppImage, removes the incompatible bundled Wayland client library if necessary, adds AppStream catalog metadata, packages and verifies the Debian copyright notice for every bundled ELF library, reinspects the result, and creates `target/release/bundle/appimage/linux-candidate.tar.gz`.
 
 Unpack that archive on Linux. The tar archive preserves the AppImage's executable permission. In the extracted folder, run:
 

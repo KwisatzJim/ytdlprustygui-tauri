@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.jim.ytdlprustygui</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>YT-DLP Rusty GUI</name>
+  <summary>Download video or audio with yt-dlp</summary>
+  <developer id="io.github.kwisatzjim">
+    <name>Jim Kelley</name>
+  </developer>
+  <description>
+    <p>
+      YT-DLP Rusty GUI is a desktop interface for downloading video with audio
+      as MP4 or extracting audio as MP3. It offers format selection, saved
+      quality preferences, progress reporting, cancellation, and light and dark themes.
+    </p>
+  </description>
+  <launchable type="desktop-id">YT-DLP Rusty GUI.desktop</launchable>
+  <url type="homepage">https://github.com/KwisatzJim/ytdlprustygui-tauri</url>
+  <url type="bugtracker">https://github.com/KwisatzJim/ytdlprustygui-tauri/issues</url>
+  <provides>
+    <binary>ytdlprustygui</binary>
+  </provides>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.2.1" date="2026-09-06" />
+  </releases>
+</component>
