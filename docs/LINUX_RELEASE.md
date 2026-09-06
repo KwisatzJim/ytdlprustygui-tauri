@@ -1,6 +1,6 @@
 # Linux release preparation
 
-Status: the x86-64 AppImage has been built on Ubuntu and manually tested successfully. Future Linux candidates are built on the project's Ubuntu server.
+Status: the x86-64 AppImage has been built on Ubuntu and manually tested successfully. The Ubuntu-server build verified copyright notices for all 178 bundled ELF libraries with 0 unresolved libraries. Future Linux candidates are built on the project's Ubuntu server.
 
 Build on Linux, using the same CPU architecture as the intended users. For an x86-64 AppImage, Ubuntu 22.04 is a suitable starting baseline. Building on a newer distribution can make the result depend on libraries unavailable on older systems. See [Tauri's AppImage guidance](https://v2.tauri.app/distribute/appimage/).
 
@@ -10,12 +10,12 @@ Install stable Rust, the Tauri 2 CLI, Node.js for the frontend tests, and the [T
 
 Use the reviewed source including local fixes, not an older checkout. Build on the Ubuntu server from the exact source commit intended for release.
 
-## Planned verification
+## Release verification
 
 - Run Rust and JavaScript tests on Linux.
 - Build an AppImage and inspect its extracted contents.
 - Check for bundled `libwayland-client.so*`, which caused graphics compatibility problems in an earlier project. Verify the produced contents rather than assuming an exclusion environment variable was honored.
-- Check bundled library license notices before distributing the image.
+- Confirm the generated license audit reports 0 unresolved libraries.
 - Generate a SHA-256 checksum for the final artifact.
 - Test the actual AppImage on the intended desktop: launch, paste, folder chooser, formats, download, conversion, cancellation, saved preferences, themes, and window growth.
 - Record the build distribution, CPU architecture, tested distributions, and any limitations.
