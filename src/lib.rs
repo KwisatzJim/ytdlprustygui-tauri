@@ -128,6 +128,66 @@ struct FormatsResult {
     audio: Vec<Format>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct DependencyStatus {
+    name: &'static str,
+    available: bool,
+    detail: String,
+}
+
+fn dependency_detail(stdout: &[u8], stderr: &[u8]) -> String {
+    let output = if stdout.is_empty() { stderr } else { stdout };
+    String::from_utf8_lossy(output)
+        .lines()
+        .next()
+        .unwrap_or("version unavailable")
+        .trim()
+        .chars()
+        .take(160)
+        .collect()
+}
+
+fn dependency_version_arg(executable: &str) -> &'static str {
+    if executable == "yt-dlp" { "--version" } else { "-version" }
+}
+
+async fn dependency_status(name: &'static str, executable: &'static str) -> DependencyStatus {
+    let mut command = tokio::process::Command::new(executable);
+    command.strip_appimage_env().arg(dependency_version_arg(executable));
+    match tokio::time::timeout(std::time::Duration::from_secs(5), command.output()).await {
+        Ok(Ok(output)) if output.status.success() => DependencyStatus {
+            name,
+            available: true,
+            detail: dependency_detail(&output.stdout, &output.stderr),
+        },
+        Ok(Ok(output)) => DependencyStatus {
+            name,
+            available: false,
+            detail: format!("version check failed ({})", output.status),
+        },
+        Ok(Err(_)) => DependencyStatus {
+            name,
+            available: false,
+            detail: "not found on PATH".into(),
+        },
+        Err(_) => DependencyStatus {
+            name,
+            available: false,
+            detail: "version check timed out".into(),
+        },
+    }
+}
+
+#[tauri::command]
+async fn check_dependencies() -> Vec<DependencyStatus> {
+    let (yt_dlp, ffmpeg, ffprobe) = tokio::join!(
+        dependency_status("yt-dlp", "yt-dlp"),
+        dependency_status("FFmpeg", "ffmpeg"),
+        dependency_status("FFprobe", "ffprobe"),
+    );
+    vec![yt_dlp, ffmpeg, ffprobe]
+}
+
 /// Checks that yt-dlp is installed and reachable on PATH. Called by the
 /// frontend on startup so we can show a clear error instead of failing
 /// silently on the first download attempt.
@@ -629,6 +689,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             check_ytdlp,
+            check_dependencies,
             fetch_formats,
             download,
             cancel_download,
@@ -652,6 +713,15 @@ mod tests {
         );
         assert!(super::path_after_marker(b"no marker", "marker").is_none());
         assert!(super::path_after_marker(b"marker   ", "marker").is_none());
+    }
+
+    #[test]
+    fn dependency_version_uses_one_bounded_line() {
+        assert_eq!(super::dependency_detail(b"2026.09.04\nextra\n", b""), "2026.09.04");
+        assert_eq!(super::dependency_detail(b"", b"ffmpeg version 8.0\nmore"), "ffmpeg version 8.0");
+        assert_eq!(super::dependency_version_arg("yt-dlp"), "--version");
+        assert_eq!(super::dependency_version_arg("ffmpeg"), "-version");
+        assert_eq!(super::dependency_version_arg("ffprobe"), "-version");
     }
 
     #[tokio::test]

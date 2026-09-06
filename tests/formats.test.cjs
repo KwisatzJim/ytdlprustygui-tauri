@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function setup(downloadResult, cancelResult) {
+function setup(downloadResult, cancelResult, dependencies = []) {
   const elements = new Map();
   const calls = [];
   let resolveFetch, rejectFetch;
@@ -25,6 +25,7 @@ function setup(downloadResult, cancelResult) {
       if (command === 'fetch_formats') return pending;
       if (command === 'download') return downloadResult;
       if (command === 'cancel_download') return cancelResult;
+      if (command === 'check_dependencies') return dependencies;
       if (command === 'plugin:clipboard-manager|read_text') return 'https://example.com/b';
     } } }, addEventListener() {} },
     document: { getElementById: element, querySelector: () => ({ value: 'video_audio' }), createElement: () => ({}) },
@@ -42,6 +43,19 @@ test('audio-only mode explains that playlist URLs download every item', () => {
   assert.equal(app.element('playlist-note').hidden, false);
   app.run(`document.querySelector = () => ({ value: 'video_audio' }); updateDownloadTypeUI()`);
   assert.equal(app.element('playlist-note').hidden, true);
+});
+
+test('dependency status uses text content and reports missing tools', async () => {
+  const app = setup(undefined, undefined, [
+    { name: 'yt-dlp', available: true, detail: '2026.09.04' },
+    { name: 'FFmpeg', available: false, detail: '<missing>' },
+    { name: 'FFprobe', available: true, detail: 'ffprobe version 8' }
+  ]);
+  await app.run('checkDependencies()');
+  assert.equal(app.element('dependency-ytdlp').textContent, 'yt-dlp: Ready');
+  assert.equal(app.element('dependency-ffmpeg').textContent, 'FFmpeg: Missing');
+  assert.equal(app.element('dependency-ffmpeg').title, '<missing>');
+  assert.match(app.element('status').textContent, /FFmpeg/);
 });
 
 test('URL editing clears loaded formats and prevents a stale download', async () => {

@@ -40,6 +40,12 @@ label { font-size: 13px; }
 input[type="text"], select { flex: 1; width: 0; min-width: 0; padding: 9px 10px; background: var(--field); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font: inherit; }
 input::placeholder { color: var(--muted); }
 .radio { display: flex; align-items: center; gap: 6px; }
+.dependency-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.dependency-row strong { margin-right: 4px; font-size: 13px; }
+.dependency { border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; font-size: 12px; }
+.dependency.ok { color: var(--ok); border-color: currentColor; }
+.dependency.err { color: var(--err); border-color: currentColor; }
+.dependency.pending { color: var(--muted); }
 input[type="radio"] { accent-color: var(--accent); }
 button { padding: 9px 16px; border: 1px solid var(--border); border-radius: 7px; background: var(--field); color: var(--text); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
 #download-btn { background: var(--accent); color: var(--accent-text); border-color: var(--accent); min-width: 150px; }

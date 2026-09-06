@@ -14,7 +14,7 @@ const state = {
 };
 
 window.addEventListener("DOMContentLoaded", () => {
-  checkYtDlp();
+  checkDependencies();
   loadConfig();
   document.getElementById("theme").addEventListener("change", (e) => {
     applyTheme(e.target.value);
@@ -90,6 +90,27 @@ async function checkYtDlp() {
     setStatus(`Ready (yt-dlp ${version})`, "");
   } catch (e) {
     setStatus(e, "err");
+  }
+}
+
+async function checkDependencies() {
+  try {
+    const dependencies = await invoke("check_dependencies");
+    for (const dependency of dependencies) {
+      const id = dependency.name.toLowerCase().replace("-", "");
+      const element = document.getElementById(`dependency-${id}`);
+      element.textContent = `${dependency.name}: ${dependency.available ? "Ready" : "Missing"}`;
+      element.className = `dependency ${dependency.available ? "ok" : "err"}`;
+      element.title = dependency.detail;
+    }
+    const missing = dependencies.filter((dependency) => !dependency.available);
+    if (missing.length) {
+      setStatus(`Missing required tools: ${missing.map((dependency) => dependency.name).join(", ")}`, "err");
+    } else {
+      setStatus("Ready to download", "ok");
+    }
+  } catch (error) {
+    setStatus(`Could not check required tools: ${error}`, "err");
   }
 }
 
