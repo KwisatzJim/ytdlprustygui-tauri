@@ -389,6 +389,11 @@ async function startDownload() {
       languages: document.getElementById("subtitle-languages").value.trim() || "en.*",
       embed: document.getElementById("embed-subtitles").checked,
     } : null,
+    mediaExtras: {
+      embedThumbnail: document.getElementById("embed-thumbnail").checked,
+      saveThumbnail: document.getElementById("save-thumbnail").checked,
+      embedMetadata: document.getElementById("embed-metadata").checked,
+    },
   };
   state.downloadQueue.push(job);
   renderQueue();
@@ -466,6 +471,7 @@ async function runQueuedDownload(job) {
       videoFormat: job.videoFormat,
       audioFormat: job.audioFormat,
       subtitles: job.subtitles,
+      mediaExtras: job.mediaExtras,
     });
     if (outcome === "cancelled") {
       setStatus("Download cancelled. Partial files were kept; continuing the queue.", "");

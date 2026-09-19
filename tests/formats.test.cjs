@@ -333,3 +333,19 @@ test('subtitle options are hidden in audio-only mode', () => {
   app.run(`document.querySelector = () => ({ value: 'audio_only' }); updateDownloadTypeUI()`);
   assert.equal(app.element('subtitle-section').style.display, 'none');
 });
+
+test('thumbnail and metadata choices are captured in a queued job', async () => {
+  const app = setup('completed');
+  app.run(`state.formatsUrl = 'https://example.com/a';
+    document.getElementById('video-format').value = '137';
+    document.getElementById('audio-format').value = '140';
+    document.getElementById('embed-thumbnail').checked = true;
+    document.getElementById('save-thumbnail').checked = false;
+    document.getElementById('embed-metadata').checked = true`);
+  await app.run('startDownload()');
+  const extras = app.calls.find(call => call.command === 'download').args.mediaExtras;
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(extras)),
+    { embedThumbnail: true, saveThumbnail: false, embedMetadata: true }
+  );
+});

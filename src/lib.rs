@@ -61,6 +61,23 @@ fn subtitle_args(options: Option<&SubtitleOptions>) -> Result<Vec<String>, Strin
     Ok(args)
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MediaExtras {
+    embed_thumbnail: bool,
+    save_thumbnail: bool,
+    embed_metadata: bool,
+}
+
+fn media_extra_args(options: Option<&MediaExtras>) -> Vec<&'static str> {
+    let Some(options) = options else { return Vec::new(); };
+    let mut args = Vec::new();
+    if options.embed_thumbnail { args.push("--embed-thumbnail"); }
+    if options.save_thumbnail { args.push("--write-thumbnail"); }
+    if options.embed_metadata { args.push("--embed-metadata"); }
+    args
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct AppConfig {
     #[serde(default)]
@@ -494,7 +511,7 @@ async fn read_download_output(
         .map_err(|e| format!("Failed to read download output: {e}"))? {
         let line = String::from_utf8_lossy(&bytes).trim().to_string();
         if line.is_empty() { continue; }
-        if ["[download]", "[Merger]", "[ExtractAudio]", "[VideoRemuxer]", "[Fixup"]
+        if ["[download]", "[Merger]", "[ExtractAudio]", "[VideoRemuxer]", "[Fixup]", "[Metadata]", "[EmbedThumbnail]"]
             .iter().any(|prefix| line.starts_with(prefix)) {
             on_progress(line.chars().take(2000).collect());
         }
@@ -659,6 +676,7 @@ async fn download(
     audio_format: Option<String>,
     audio_quality: Option<AudioQuality>,
     subtitles: Option<SubtitleOptions>,
+    media_extras: Option<MediaExtras>,
     on_progress: tauri::ipc::Channel<String>,
     download_id: String,
     downloads: tauri::State<'_, DownloadState>,
@@ -676,6 +694,7 @@ async fn download(
     let mut cmd = tokio::process::Command::new("yt-dlp");
     cmd.strip_appimage_env();
     cmd.args(["--newline", "--progress", "--no-colors"]);
+    cmd.args(media_extra_args(media_extras.as_ref()));
 
     match download_type.as_str() {
         "video_audio" => {
@@ -997,6 +1016,26 @@ mod tests {
             embed: false,
         };
         assert!(super::subtitle_args(Some(&options)).is_err());
+    }
+
+
+    #[test]
+    fn thumbnail_and_metadata_options_are_independent() {
+        let options = super::MediaExtras {
+            embed_thumbnail: true,
+            save_thumbnail: false,
+            embed_metadata: true,
+        };
+        assert_eq!(
+            super::media_extra_args(Some(&options)),
+            vec!["--embed-thumbnail", "--embed-metadata"]
+        );
+        let separate = super::MediaExtras {
+            save_thumbnail: true,
+            ..Default::default()
+        };
+        assert_eq!(super::media_extra_args(Some(&separate)), vec!["--write-thumbnail"]);
+        assert!(super::media_extra_args(None).is_empty());
     }
 
 }

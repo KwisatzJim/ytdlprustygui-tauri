@@ -104,3 +104,5 @@ th { color: var(--muted); font-weight: 600; }
 .option-group .row { margin-top: 0.65rem; }
 .check { display: inline-flex; align-items: center; gap: 0.45rem; }
 .subtitle-hint { margin-top: 0.35rem; margin-bottom: 0.55rem; }
+
+.option-checks { display: grid; gap: 0.45rem; }
