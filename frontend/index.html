@@ -14,205 +14,126 @@
         <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
       </div>
     </header>
-    <div class="panel">
-    <h2>Download destination</h2>
 
-    <section class="row">
-      <label for="url">URL</label>
-      <input id="url" type="text" placeholder="https://..." />
-      <button id="paste-btn">Paste</button>
-    </section>
+    <nav class="tabs" role="tablist" aria-label="Application sections">
+      <button id="download-tab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="download-panel" data-tab="download-panel">Download</button>
+      <button id="options-tab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="options-panel" data-tab="options-panel">Options</button>
+    </nav>
 
-    <section class="row">
-      <label for="output-dir">Output Directory</label>
-      <input id="output-dir" type="text" />
-      <button id="browse-btn">Browse</button>
-    </section>
+    <div id="download-panel" class="tab-panel" role="tabpanel" aria-labelledby="download-tab">
+      <div class="panel">
+        <h2>Download</h2>
+        <section class="row">
+          <label for="url">URL</label>
+          <input id="url" type="text" placeholder="https://..." />
+          <button id="paste-btn">Paste</button>
+        </section>
+        <section class="row">
+          <label for="output-dir">Output Directory</label>
+          <input id="output-dir" type="text" />
+          <button id="browse-btn">Browse</button>
+        </section>
+        <section class="dependency-row" aria-label="Required tools">
+          <strong>Tools</strong>
+          <span id="dependency-ytdlp" class="dependency pending">yt-dlp: checking…</span>
+          <span id="dependency-ffmpeg" class="dependency pending">FFmpeg: checking…</span>
+          <span id="dependency-ffprobe" class="dependency pending">FFprobe: checking…</span>
+        </section>
+      </div>
 
-    <section class="dependency-row" aria-label="Required tools">
-      <strong>Required tools</strong>
-      <span id="dependency-ytdlp" class="dependency pending">yt-dlp: checking…</span>
-      <span id="dependency-ffmpeg" class="dependency pending">FFmpeg: checking…</span>
-      <span id="dependency-ffprobe" class="dependency pending">FFprobe: checking…</span>
-    </section>
+      <div class="panel">
+        <section class="row" role="group" aria-label="Download type">
+          <label>Download Type</label>
+          <label class="radio"><input type="radio" name="download-type" value="video_audio" checked /> Video+Audio (MP4)</label>
+          <label class="radio"><input type="radio" name="download-type" value="audio_only" /> Audio Only (MP3)</label>
+        </section>
+        <p id="playlist-note" class="hint" hidden>A playlist URL downloads every item as a separate MP3.</p>
 
+        <section id="format-section">
+          <div class="row"><button id="fetch-btn">Fetch Formats</button></div>
+          <div class="row" id="video-format-row" style="display:none">
+            <label for="video-format">Video Format</label><select id="video-format"></select>
+          </div>
+          <div class="row" id="audio-format-row" style="display:none">
+            <label for="audio-format">Audio Format</label><select id="audio-format"></select>
+          </div>
+        </section>
+
+        <section class="row action-row">
+          <button id="download-btn">Add to Queue</button>
+          <button id="cancel-btn" style="display:none" disabled>Cancel Download</button>
+          <button id="open-folder-btn" style="display:none">Open Downloads Folder</button>
+          <span id="spinner" class="spinner" style="display:none" aria-hidden="true"></span>
+        </section>
+        <p class="queue-help">For Video+Audio, fetch formats for each URL before adding it.</p>
+        <p id="queue-feedback" class="queue-feedback" role="status" aria-live="polite"></p>
+
+        <section id="queue-section" class="queue" aria-labelledby="queue-heading" hidden>
+          <h3 id="queue-heading">Download Queue</h3><ol id="queue-list"></ol>
+        </section>
+        <section class="row status-row" role="status" aria-live="polite">
+          <strong>Status:</strong><span id="status">Checking required tools...</span>
+        </section>
+      </div>
+
+      <section id="format-lists" style="display:none">
+        <details><summary>Available Video Formats</summary><div id="video-format-table"></div></details>
+        <details><summary>Available Audio Formats</summary><div id="audio-format-table"></div></details>
+      </section>
     </div>
-    <div class="panel">
-    <h2>Quality &amp; preferences</h2>
-    <section class="row">
-      <label for="preferred-video-resolution">Preferred Video Resolution</label>
-      <select id="preferred-video-resolution" title="Selects the highest available resolution at or below your preference. If all are higher, selects the lowest available. You can override the selection below.">
-        <option value="">Best available</option>
-        <option value="2160">2160p (4K)</option>
-        <option value="1440">1440p</option>
-        <option value="1080">1080p (Full HD)</option>
-        <option value="720">720p (HD)</option>
-        <option value="480">480p</option>
-        <option value="360">360p</option>
-      </select>
-    </section>
 
-    <section class="row">
-      <label for="preferred-audio-quality">Preferred Audio Quality</label>
-      <select id="preferred-audio-quality" title="Selects higher or lower ranked audio within your language preference for video downloads. For MP3, controls conversion quality using the best available source.">
-        <option value="high">High (default)</option>
-        <option value="low">Low</option>
-      </select>
-    </section>
-
-    <section class="row">
-      <label for="preferred-audio-language">Preferred Audio Language</label>
-      <select id="preferred-audio-language">
-        <option value="">No preference (use creator's default)</option>
-        <option value="en">English</option>
-        <option value="es">Spanish</option>
-        <option value="fr">French</option>
-        <option value="de">German</option>
-        <option value="it">Italian</option>
-        <option value="pt">Portuguese</option>
-        <option value="ru">Russian</option>
-        <option value="ja">Japanese</option>
-        <option value="ko">Korean</option>
-        <option value="zh">Chinese</option>
-        <option value="hi">Hindi</option>
-        <option value="ar">Arabic</option>
-        <option value="nl">Dutch</option>
-        <option value="pl">Polish</option>
-        <option value="tr">Turkish</option>
-        <option value="vi">Vietnamese</option>
-        <option value="th">Thai</option>
-        <option value="id">Indonesian</option>
-        <option value="sv">Swedish</option>
-        <option value="uk">Ukrainian</option>
-      </select>
-    </section>
-
-    </div>
-    <div class="panel">
-    <section class="row" role="group" aria-label="Download type">
-      <label>Download Type</label>
-      <label class="radio">
-        <input type="radio" name="download-type" value="video_audio" checked />
-        Video+Audio (MP4)
-      </label>
-      <label class="radio">
-        <input type="radio" name="download-type" value="audio_only" />
-        Audio Only (MP3)
-      </label>
-    </section>
-    <p id="playlist-note" class="hint" hidden>
-      A playlist URL downloads every item as a separate MP3.
-    </p>
-
-    <section id="subtitle-section" class="option-group" aria-labelledby="subtitle-heading">
-      <h3 id="subtitle-heading">Subtitles</h3>
-      <label class="check"><input id="download-subtitles" type="checkbox" /> Download subtitles</label>
-      <div id="subtitle-options" hidden>
-        <div class="row">
-          <label for="subtitle-source">Subtitle Source</label>
-          <select id="subtitle-source">
-            <option value="creator">Creator-provided</option>
-            <option value="automatic">Automatically generated</option>
-            <option value="both">Both when available</option>
+    <div id="options-panel" class="tab-panel" role="tabpanel" aria-labelledby="options-tab" hidden>
+      <div class="panel">
+        <h2>Quality preferences</h2>
+        <section class="row">
+          <label for="preferred-video-resolution">Video Resolution</label>
+          <select id="preferred-video-resolution" title="Selects the highest available resolution at or below your preference. You can override the selection after fetching formats.">
+            <option value="">Best available</option><option value="2160">2160p (4K)</option><option value="1440">1440p</option><option value="1080">1080p (Full HD)</option><option value="720">720p (HD)</option><option value="480">480p</option><option value="360">360p</option>
           </select>
-        </div>
-        <div class="row">
-          <label for="subtitle-languages">Subtitle Languages</label>
-          <input id="subtitle-languages" type="text" value="en.*" placeholder="en.*,es" />
-        </div>
-        <p class="hint subtitle-hint">Use comma-separated language tags. <strong>en.*</strong> includes English variants.</p>
-        <label class="check"><input id="embed-subtitles" type="checkbox" checked /> Embed subtitles in the MP4</label>
-      </div>
-    </section>
-
-    <section class="option-group" aria-labelledby="metadata-heading">
-      <h3 id="metadata-heading">Thumbnail &amp; Metadata</h3>
-      <div class="option-checks">
-        <label class="check"><input id="embed-thumbnail" type="checkbox" /> Embed thumbnail as cover art</label>
-        <label class="check"><input id="save-thumbnail" type="checkbox" /> Keep a separate thumbnail image</label>
-        <label class="check"><input id="embed-metadata" type="checkbox" /> Embed title, creator, date, and other metadata</label>
-      </div>
-    </section>
-
-    <section class="option-group" aria-labelledby="cookies-heading">
-      <h3 id="cookies-heading">Cookies</h3>
-      <div class="row">
-        <label for="cookie-source">Cookie Source</label>
-        <select id="cookie-source">
-          <option value="none">None</option>
-          <option value="browser">Installed browser</option>
-          <option value="file">Netscape cookies file</option>
-        </select>
-      </div>
-      <div id="cookie-browser-row" class="row" hidden>
-        <label for="cookie-browser">Browser</label>
-        <select id="cookie-browser">
-          <option value="safari">Safari</option>
-          <option value="chrome">Chrome</option>
-          <option value="chromium">Chromium</option>
-          <option value="firefox">Firefox</option>
-          <option value="brave">Brave</option>
-          <option value="edge">Edge</option>
-          <option value="opera">Opera</option>
-          <option value="vivaldi">Vivaldi</option>
-        </select>
-      </div>
-      <div id="cookie-file-row" class="row" hidden>
-        <label for="cookie-file">Cookie File</label>
-        <input id="cookie-file" type="text" readonly placeholder="Choose cookies.txt" />
-        <button id="cookie-file-btn" type="button">Choose</button>
-      </div>
-      <p class="cookie-hint">Cookie choices are used only for the current app session and queued downloads.</p>
-    </section>
-
-    <section id="format-section">
-      <div class="row">
-        <button id="fetch-btn">Fetch Formats</button>
+        </section>
+        <section class="row">
+          <label for="preferred-audio-quality">Audio Quality</label>
+          <select id="preferred-audio-quality" title="Selects higher or lower ranked audio within your language preference."><option value="high">High (default)</option><option value="low">Low</option></select>
+        </section>
+        <section class="row">
+          <label for="preferred-audio-language">Audio Language</label>
+          <select id="preferred-audio-language">
+            <option value="">No preference (creator's default)</option><option value="en">English</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="it">Italian</option><option value="pt">Portuguese</option><option value="ru">Russian</option><option value="ja">Japanese</option><option value="ko">Korean</option><option value="zh">Chinese</option><option value="hi">Hindi</option><option value="ar">Arabic</option><option value="nl">Dutch</option><option value="pl">Polish</option><option value="tr">Turkish</option><option value="vi">Vietnamese</option><option value="th">Thai</option><option value="id">Indonesian</option><option value="sv">Swedish</option><option value="uk">Ukrainian</option>
+          </select>
+        </section>
       </div>
 
-      <div class="row" id="video-format-row" style="display:none">
-        <label for="video-format">Video Format</label>
-        <select id="video-format"></select>
+      <div class="panel options-grid">
+        <section id="subtitle-section" class="option-card" aria-labelledby="subtitle-heading">
+          <h2 id="subtitle-heading">Subtitles</h2>
+          <label class="check"><input id="download-subtitles" type="checkbox" /> Download subtitles</label>
+          <div id="subtitle-options" hidden>
+            <div class="compact-field"><label for="subtitle-source">Source</label><select id="subtitle-source"><option value="creator">Creator-provided</option><option value="automatic">Automatically generated</option><option value="both">Both when available</option></select></div>
+            <div class="compact-field"><label for="subtitle-languages">Languages</label><input id="subtitle-languages" type="text" value="en.*" placeholder="en.*,es" /></div>
+            <p class="compact-hint">Comma-separated tags; <strong>en.*</strong> includes English variants.</p>
+            <label class="check"><input id="embed-subtitles" type="checkbox" checked /> Embed in MP4</label>
+          </div>
+        </section>
+
+        <section class="option-card" aria-labelledby="metadata-heading">
+          <h2 id="metadata-heading">Thumbnail &amp; Metadata</h2>
+          <div class="option-checks">
+            <label class="check"><input id="embed-thumbnail" type="checkbox" /> Embed thumbnail as cover art</label>
+            <label class="check"><input id="save-thumbnail" type="checkbox" /> Keep separate thumbnail image</label>
+            <label class="check"><input id="embed-metadata" type="checkbox" /> Embed media metadata</label>
+          </div>
+        </section>
+
+        <section class="option-card cookie-card" aria-labelledby="cookies-heading">
+          <h2 id="cookies-heading">Cookies</h2>
+          <div class="compact-field"><label for="cookie-source">Source</label><select id="cookie-source"><option value="none">None</option><option value="browser">Installed browser</option><option value="file">Netscape cookies file</option></select></div>
+          <div id="cookie-browser-row" class="compact-field" hidden><label for="cookie-browser">Browser</label><select id="cookie-browser"><option value="safari">Safari</option><option value="chrome">Chrome</option><option value="chromium">Chromium</option><option value="firefox">Firefox</option><option value="brave">Brave</option><option value="edge">Edge</option><option value="opera">Opera</option><option value="vivaldi">Vivaldi</option></select></div>
+          <div id="cookie-file-row" class="compact-field cookie-file" hidden><label for="cookie-file">File</label><input id="cookie-file" type="text" readonly placeholder="Choose cookies.txt" /><button id="cookie-file-btn" type="button">Choose</button></div>
+          <p class="compact-hint">Used only for this session and queued downloads.</p>
+        </section>
       </div>
-
-      <div class="row" id="audio-format-row" style="display:none">
-        <label for="audio-format">Audio Format</label>
-        <select id="audio-format"></select>
-      </div>
-    </section>
-
-    <section class="row">
-      <button id="download-btn">Add to Queue</button>
-      <button id="cancel-btn" style="display:none" disabled>Cancel Download</button>
-      <button id="open-folder-btn" style="display:none">Open Downloads Folder</button>
-      <span id="spinner" class="spinner" style="display:none" aria-hidden="true"></span>
-    </section>
-    <p class="queue-help">For Video+Audio, fetch formats for each URL before adding it.</p>
-    <p id="queue-feedback" class="queue-feedback" role="status" aria-live="polite"></p>
-
-    <section id="queue-section" class="queue" aria-labelledby="queue-heading" hidden>
-      <h3 id="queue-heading">Download Queue</h3>
-      <ol id="queue-list"></ol>
-    </section>
-
-    <section class="row status-row" role="status" aria-live="polite">
-      <strong>Status:</strong>
-      <span id="status">Checking yt-dlp...</span>
-    </section>
-
     </div>
-    <section id="format-lists" style="display:none">
-      <details>
-        <summary>Available Video Formats</summary>
-        <div id="video-format-table"></div>
-      </details>
-      <details>
-        <summary>Available Audio Formats</summary>
-        <div id="audio-format-table"></div>
-      </details>
-    </section>
   </main>
-
   <script src="main.js"></script>
   <script src="window-size.js"></script>
 </body>

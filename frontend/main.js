@@ -19,6 +19,9 @@ const state = {
 window.addEventListener("DOMContentLoaded", () => {
   checkDependencies();
   loadConfig();
+  document.querySelectorAll("[data-tab]").forEach((button) => {
+    button.addEventListener("click", () => switchTab(button.dataset.tab));
+  });
   document.getElementById("theme").addEventListener("change", (e) => {
     applyTheme(e.target.value);
     saveConfig({ theme: e.target.value });
@@ -65,6 +68,17 @@ window.addEventListener("DOMContentLoaded", () => {
 
   updateDownloadTypeUI();
 });
+
+function switchTab(panelId) {
+  document.querySelectorAll(".tab-panel").forEach((panel) => {
+    panel.hidden = panel.id !== panelId;
+  });
+  document.querySelectorAll("[data-tab]").forEach((button) => {
+    const selected = button.dataset.tab === panelId;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", String(selected));
+  });
+}
 
 async function loadConfig() {
   try {

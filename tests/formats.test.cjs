@@ -13,7 +13,8 @@ function setup(downloadResult, cancelResult, dependencies = []) {
   });
   const element = (id) => {
     if (!elements.has(id)) elements.set(id, {
-      value: '', innerHTML: '', style: {}, parentElement: { style: {} },
+      id, value: '', innerHTML: '', style: {}, parentElement: { style: {} }, dataset: {},
+      classList: { toggle() {} }, setAttribute() {},
       appendChild(option) { this.value ||= option.value; },
     });
     return elements.get(id);
@@ -30,7 +31,16 @@ function setup(downloadResult, cancelResult, dependencies = []) {
       if (command === 'open_output_folder') return undefined;
       if (command === 'plugin:clipboard-manager|read_text') return 'https://example.com/b';
     } } }, addEventListener() {} },
-    document: { getElementById: element, querySelector: () => ({ value: 'video_audio' }), createElement: () => ({}) },
+    document: {
+      getElementById: element,
+      querySelector: () => ({ value: 'video_audio' }),
+      querySelectorAll: selector => selector === '.tab-panel'
+        ? [element('download-panel'), element('options-panel')]
+        : selector === '[data-tab]'
+          ? [Object.assign(element('download-tab'), { dataset: { tab: 'download-panel' } }), Object.assign(element('options-tab'), { dataset: { tab: 'options-panel' } })]
+          : [],
+      createElement: () => ({}),
+    },
     getComputedStyle: () => ({ getPropertyValue: () => '' }),
   });
   vm.runInContext(fs.readFileSync('frontend/main.js', 'utf8'), context);
@@ -371,4 +381,19 @@ test('cookie source displays only its relevant controls', () => {
   app.run('updateCookieUI()');
   assert.equal(app.element('cookie-file-row').hidden, false);
   assert.equal(app.element('cookie-browser-row').hidden, true);
+});
+
+
+test('tab switch shows one accessible application section at a time', () => {
+  const app = setup();
+  app.run(`switchTab('options-panel')`);
+  assert.equal(app.element('download-panel').hidden, true);
+  assert.equal(app.element('options-panel').hidden, false);
+});
+
+test('tabbed layout keeps every application control uniquely addressable', () => {
+  const html = fs.readFileSync('frontend/index.html', 'utf8');
+  for (const id of ['download-panel', 'options-panel', 'url', 'output-dir', 'subtitle-section', 'cookie-source', 'queue-list', 'status']) {
+    assert.equal((html.match(new RegExp(`id="${id}"`, 'g')) || []).length, 1, `${id} should appear once`);
+  }
 });
