@@ -2,6 +2,12 @@
 
 A desktop front end for [yt-dlp](https://github.com/yt-dlp/yt-dlp), built with Rust and Tauri. Download video with audio to MP4, or extract audio to MP3.
 
+## Screenshots
+
+| Download | Options |
+| --- | --- |
+| ![Download tab with URL, format, and queue controls](docs/images/ytdlp-rusty-gui-download.png) | ![Options tab with quality, subtitle, metadata, cookie, and updater controls](docs/images/ytdlp-rusty-gui-options.png) |
+
 ## Features
 
 - Choose video and audio formats before downloading video.

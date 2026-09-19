@@ -20,14 +20,15 @@ Test the actual packaged app, not `cargo tauri dev`. A second Apple-silicon Mac 
 
 ## Verification record
 
-Verified on 2026-09-06:
+Verified on 2026-09-18:
 
-- Version: 0.2.2; architecture: arm64 (Apple silicon).
-- DMG: `target/release/bundle/dmg/YT-DLP Rusty GUI_0.2.2_aarch64.dmg`.
+- Version: 0.3.0; architecture: arm64 (Apple silicon).
+- DMG: `target/release/bundle/dmg/YT-DLP Rusty GUI_0.3.0_aarch64.dmg`.
 - `hdiutil verify`: passed.
 - `codesign --verify --deep --strict --verbose=2`: passed for both the build output and the app mounted from the DMG.
 - Signature: ad hoc, with sealed resources and hardened runtime; no Developer ID or notarization.
-- Tests: 23 JavaScript tests and 13 Rust tests passed.
-- SHA-256: `f781bfb5db41faa8745ae71d9cda8de833c936de8572de038369d0a254d5ee08`.
+- Tests: 33 JavaScript tests and 21 Rust tests passed.
+- SHA-256: `19acf865d5e695d130d27d2e3321d899c7224efe081faa5636aaf22dba2717a8`.
+- Packaged app: manually confirmed for tabs, yt-dlp updating, format fetching, and Firefox cookies.
 
-Packaged-app startup and interaction testing remain a manual step for this rebuilt version. The Linux x86-64 AppImage has separate verification; Intel macOS is not currently offered. This candidate is published in the GitHub `v0.2.2` release.
+The Linux x86-64 AppImage has separate verification; Intel macOS is not currently offered. This candidate is prepared for the GitHub `v0.3.0` release.
