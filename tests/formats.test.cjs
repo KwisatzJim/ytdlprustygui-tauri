@@ -19,11 +19,12 @@ function setup(downloadResult, cancelResult, dependencies = []) {
     return elements.get(id);
   };
   element('url').value = 'https://example.com/a';
+  element('output-dir').value = '/tmp/downloads';
   const context = vm.createContext({
     window: { __TAURI__: { core: { Channel: class {}, invoke: async (command, args) => {
       calls.push({ command, args });
       if (command === 'fetch_formats') return pending;
-      if (command === 'download') return downloadResult;
+      if (command === 'download') return typeof downloadResult === 'function' ? downloadResult(args) : downloadResult;
       if (command === 'cancel_download') return cancelResult;
       if (command === 'check_dependencies') return dependencies;
       if (command === 'open_output_folder') return undefined;
@@ -84,6 +85,7 @@ test('URL editing clears loaded formats and prevents a stale download', async ()
   assert.equal(app.element('format-lists').style.display, 'none');
   await app.run('startDownload()');
   assert.equal(app.calls.some(c => c.command === 'download'), false);
+  assert.match(app.element('queue-feedback').textContent, /Fetch formats/);
 });
 
 test('late results are discarded even when URL changes away and back', async () => {
@@ -195,7 +197,8 @@ test('live progress updates while downloading and late updates cannot overwrite 
   const channel = app.calls.at(-1).args.onProgress;
   channel.onmessage('[download] 25% at 2MiB/s ETA 00:30');
   assert.match(app.element('status').textContent, /25%/);
-  assert.equal(app.element('download-btn').disabled, true);
+  assert.equal(app.element('download-btn').disabled, false);
+  assert.equal(app.element('fetch-btn').disabled, false);
   channel.onmessage('[ExtractAudio] Destination: test.mp3');
   assert.match(app.element('status').textContent, /ExtractAudio/);
   complete();
@@ -231,7 +234,7 @@ test('cancel waits for stopped download, ignores progress, and restores controls
   assert.equal(app.calls.at(-1).args.downloadId, request.downloadId);
   request.onProgress.onmessage('[download] 75%');
   assert.equal(app.element('status').textContent, 'Cancelling download...');
-  assert.equal(app.element('download-btn').disabled, true);
+  assert.equal(app.element('download-btn').disabled, false);
   await app.run('cancelDownload()');
   assert.equal(app.calls.filter(c => c.command === 'cancel_download').length, 1);
   finish('cancelled');
@@ -266,4 +269,44 @@ test('failed cancellation can be retried while the download remains active', asy
   assert.match(app.element('status').textContent, /Could not cancel/);
   finish('completed');
   await running;
+});
+
+
+test('queue captures settings and starts jobs one at a time', async () => {
+  const resolvers = [];
+  const app = setup(() => new Promise(resolve => resolvers.push(resolve)));
+  app.run(`state.formatsUrl = 'https://example.com/a';
+  document.getElementById('video-format').value = '137';
+  document.getElementById('audio-format').value = '140'`);
+  const first = app.run('startDownload()');
+  app.element('url').value = 'https://example.com/b';
+  app.run(`document.querySelector = () => ({ value: 'audio_only' })`);
+  await app.run('startDownload()');
+  assert.equal(app.calls.filter(call => call.command === 'download').length, 1);
+  assert.match(app.element('queue-list').innerHTML, /example\.com\/b/);
+  assert.equal(app.element('queue-feedback').textContent, 'Added to queue.');
+  resolvers[0]('completed');
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.calls.filter(call => call.command === 'download').length, 2);
+  const second = app.calls.filter(call => call.command === 'download')[1].args;
+  assert.equal(second.url, 'https://example.com/b');
+  assert.equal(second.downloadType, 'audio_only');
+  resolvers[1]('completed');
+  await first;
+});
+
+test('queued jobs can be removed before they start', async () => {
+  let finish;
+  const app = setup(new Promise(resolve => { finish = resolve; }));
+  app.run(`state.formatsUrl = 'https://example.com/a'`);
+  const running = app.run('startDownload()');
+  app.element('url').value = 'https://example.com/b';
+  app.run(`document.querySelector = () => ({ value: 'audio_only' })`);
+  await app.run('startDownload()');
+  const queuedId = app.run('state.downloadQueue[0].queueId');
+  app.run(`removeQueuedDownload(${queuedId})`);
+  assert.equal(app.run('state.downloadQueue.length'), 0);
+  finish('completed');
+  await running;
+  assert.equal(app.calls.filter(call => call.command === 'download').length, 1);
 });

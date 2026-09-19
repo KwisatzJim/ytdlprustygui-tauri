@@ -78,3 +78,23 @@ th { color: var(--muted); font-weight: 600; }
   .radio { flex: 1 0 auto; }
   .hint { margin-left: 0; }
 }
+
+.queue {
+  margin: 0.9rem 0;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--field);
+}
+
+.queue h3 { margin: 0 0 0.55rem; font-size: 0.95rem; }
+.queue ol { margin: 0; padding-left: 1.4rem; }
+.queue li { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin: 0.35rem 0; }
+.queue li span { min-width: 0; overflow-wrap: anywhere; }
+.queue-remove { flex: 0 0 auto; padding: 0.35rem 0.65rem; }
+
+.queue-help, .queue-feedback { margin: -0.45rem 0 0.65rem; font-size: 0.8rem; }
+.queue-help { color: var(--muted); }
+.queue-feedback { min-height: 1.2em; }
+.queue-feedback.var-ok { color: var(--ok); }
+.queue-feedback.var-err { color: var(--err); }

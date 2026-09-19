@@ -121,10 +121,17 @@
     </section>
 
     <section class="row">
-      <button id="download-btn">Download</button>
+      <button id="download-btn">Add to Queue</button>
       <button id="cancel-btn" style="display:none" disabled>Cancel Download</button>
       <button id="open-folder-btn" style="display:none">Open Downloads Folder</button>
       <span id="spinner" class="spinner" style="display:none" aria-hidden="true"></span>
+    </section>
+    <p class="queue-help">For Video+Audio, fetch formats for each URL before adding it.</p>
+    <p id="queue-feedback" class="queue-feedback" role="status" aria-live="polite"></p>
+
+    <section id="queue-section" class="queue" aria-labelledby="queue-heading" hidden>
+      <h3 id="queue-heading">Download Queue</h3>
+      <ol id="queue-list"></ol>
     </section>
 
     <section class="row status-row" role="status" aria-live="polite">

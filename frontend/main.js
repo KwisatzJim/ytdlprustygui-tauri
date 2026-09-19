@@ -7,6 +7,8 @@ const state = {
   formatsRevision: 0,
   downloadSequence: 0,
   activeDownload: null,
+  downloadQueue: [],
+  queueProcessing: false,
   completedOutputDir: null,
   // Mirrors the backend's AppConfig. save_config replaces the whole file, so
   // we keep the full object here and merge into it on every change instead
@@ -29,6 +31,10 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("download-btn").addEventListener("click", startDownload);
   document.getElementById("cancel-btn").addEventListener("click", cancelDownload);
   document.getElementById("open-folder-btn").addEventListener("click", openOutputFolder);
+  document.getElementById("queue-list").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-queue-id]");
+    if (button) removeQueuedDownload(Number(button.dataset.queueId));
+  });
   document.getElementById("preferred-audio-quality").addEventListener("change", (e) => {
     saveConfig({ preferred_audio_quality: e.target.value });
     selectBestAudioFormat();
@@ -128,10 +134,16 @@ function setStatus(message, cls) {
   el.className = cls ? `var-${cls}` : "";
 }
 
-function setProcessing(isProcessing) {
+function setProcessing(isProcessing, formAvailable = false) {
   document.getElementById("spinner").style.display = isProcessing ? "inline-block" : "none";
-  document.getElementById("fetch-btn").disabled = isProcessing;
-  document.getElementById("download-btn").disabled = isProcessing;
+  document.getElementById("fetch-btn").disabled = isProcessing && !formAvailable;
+  document.getElementById("download-btn").disabled = isProcessing && !formAvailable;
+}
+
+function setQueueFeedback(message, cls = "") {
+  const element = document.getElementById("queue-feedback");
+  element.textContent = message;
+  element.className = cls ? `queue-feedback var-${cls}` : "queue-feedback";
 }
 
 async function pasteUrl() {
@@ -335,22 +347,89 @@ async function cancelDownload() {
 }
 
 async function startDownload() {
-  if (state.activeDownload) return;
   const url = document.getElementById("url").value.trim();
   const outputDir = document.getElementById("output-dir").value.trim();
   const downloadType = document.querySelector('input[name="download-type"]:checked').value;
 
+  if (!url) {
+    setQueueFeedback("Please enter a URL first.", "err");
+    return;
+  }
+  if (!outputDir) {
+    setQueueFeedback("Please choose an output directory.", "err");
+    return;
+  }
   if (downloadType === "video_audio" && state.formatsUrl !== url) {
-    setStatus("Please fetch formats for the current video first", "err");
+    setQueueFeedback("Fetch formats for this video before adding it to the queue.", "err");
+    return;
+  }
+  if (state.downloadQueue.length + (state.activeDownload ? 1 : 0) >= 10) {
+    setQueueFeedback("The queue is full. Wait for a download to finish or remove a queued item.", "err");
     return;
   }
 
+  const job = {
+    queueId: ++state.downloadSequence,
+    url,
+    outputDir,
+    downloadType,
+    audioQuality: state.config.preferred_audio_quality || "high",
+    videoFormat: downloadType === "video_audio" ? document.getElementById("video-format").value : null,
+    audioFormat: downloadType === "video_audio" ? document.getElementById("audio-format").value : null,
+  };
+  state.downloadQueue.push(job);
+  renderQueue();
+  setQueueFeedback(state.activeDownload ? "Added to queue." : "Download started.", "ok");
+  return processQueue();
+}
+
+function removeQueuedDownload(queueId) {
+  const index = state.downloadQueue.findIndex((job) => job.queueId === queueId);
+  if (index === -1) return;
+  state.downloadQueue.splice(index, 1);
+  renderQueue();
+  setQueueFeedback("Removed queued download.");
+}
+
+function renderQueue() {
+  const section = document.getElementById("queue-section");
+  const list = document.getElementById("queue-list");
+  const jobs = [
+    ...(state.activeDownload ? [{ ...state.activeDownload.job, active: true }] : []),
+    ...state.downloadQueue.map((job) => ({ ...job, active: false })),
+  ];
+  section.hidden = jobs.length === 0;
+  list.innerHTML = jobs.map((job) => {
+    const kind = job.downloadType === "audio_only" ? "MP3" : "MP4";
+    const stateLabel = job.active ? "Downloading" : "Waiting";
+    const remove = job.active ? "" : `<button type="button" class="queue-remove" data-queue-id="${job.queueId}">Remove</button>`;
+    return `<li><span><strong>${stateLabel}:</strong> ${escapeHtml(job.url)} <small>(${kind})</small></span>${remove}</li>`;
+  }).join("");
+}
+
+async function processQueue() {
+  if (state.queueProcessing) return;
+  state.queueProcessing = true;
+  try {
+    while (state.downloadQueue.length) {
+      const job = state.downloadQueue.shift();
+      await runQueuedDownload(job);
+    }
+  } finally {
+    state.queueProcessing = false;
+    renderQueue();
+  }
+}
+
+async function runQueuedDownload(job) {
+  const { url, outputDir, downloadType } = job;
   setStatus("Checking download requirements...", "warn");
   state.completedOutputDir = null;
   document.getElementById("open-folder-btn").style.display = "none";
-  setProcessing(true);
-  const download = { id: String(++state.downloadSequence), cancelling: false };
+  setProcessing(true, true);
+  const download = { id: String(job.queueId), cancelling: false, job };
   state.activeDownload = download;
+  renderQueue();
   const cancelButton = document.getElementById("cancel-btn");
   cancelButton.style.display = "inline-block";
   cancelButton.disabled = true;
@@ -370,22 +449,23 @@ async function startDownload() {
       url,
       outputDir,
       downloadType,
-      audioQuality: state.config.preferred_audio_quality || "high",
-      videoFormat: downloadType === "video_audio" ? document.getElementById("video-format").value : null,
-      audioFormat: downloadType === "video_audio" ? document.getElementById("audio-format").value : null,
+      audioQuality: job.audioQuality,
+      videoFormat: job.videoFormat,
+      audioFormat: job.audioFormat,
     });
     if (outcome === "cancelled") {
-      setStatus("Download cancelled. Partial files were kept; you can retry the download.", "");
+      setStatus("Download cancelled. Partial files were kept; continuing the queue.", "");
     } else {
       setStatus("Download completed successfully", "ok");
       state.completedOutputDir = outputDir;
       document.getElementById("open-folder-btn").style.display = "inline-block";
     }
   } catch (e) {
-    setStatus(e, "err");
+    setStatus(`Queued download failed: ${e}`, "err");
   } finally {
     acceptingProgress = false;
     state.activeDownload = null;
+    renderQueue();
     cancelButton.style.display = "none";
     cancelButton.disabled = true;
     setProcessing(false);
