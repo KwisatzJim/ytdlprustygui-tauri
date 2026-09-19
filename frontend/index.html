@@ -134,6 +134,37 @@
       </div>
     </section>
 
+    <section class="option-group" aria-labelledby="cookies-heading">
+      <h3 id="cookies-heading">Cookies</h3>
+      <div class="row">
+        <label for="cookie-source">Cookie Source</label>
+        <select id="cookie-source">
+          <option value="none">None</option>
+          <option value="browser">Installed browser</option>
+          <option value="file">Netscape cookies file</option>
+        </select>
+      </div>
+      <div id="cookie-browser-row" class="row" hidden>
+        <label for="cookie-browser">Browser</label>
+        <select id="cookie-browser">
+          <option value="safari">Safari</option>
+          <option value="chrome">Chrome</option>
+          <option value="chromium">Chromium</option>
+          <option value="firefox">Firefox</option>
+          <option value="brave">Brave</option>
+          <option value="edge">Edge</option>
+          <option value="opera">Opera</option>
+          <option value="vivaldi">Vivaldi</option>
+        </select>
+      </div>
+      <div id="cookie-file-row" class="row" hidden>
+        <label for="cookie-file">Cookie File</label>
+        <input id="cookie-file" type="text" readonly placeholder="Choose cookies.txt" />
+        <button id="cookie-file-btn" type="button">Choose</button>
+      </div>
+      <p class="cookie-hint">Cookie choices are used only for the current app session and queued downloads.</p>
+    </section>
+
     <section id="format-section">
       <div class="row">
         <button id="fetch-btn">Fetch Formats</button>

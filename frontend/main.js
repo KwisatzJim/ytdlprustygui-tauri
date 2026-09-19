@@ -32,6 +32,8 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("cancel-btn").addEventListener("click", cancelDownload);
   document.getElementById("open-folder-btn").addEventListener("click", openOutputFolder);
   document.getElementById("download-subtitles").addEventListener("change", updateSubtitleUI);
+  document.getElementById("cookie-source").addEventListener("change", updateCookieUI);
+  document.getElementById("cookie-file-btn").addEventListener("click", browseCookieFile);
   document.getElementById("queue-list").addEventListener("click", (event) => {
     const button = event.target.closest("button[data-queue-id]");
     if (button) removeQueuedDownload(Number(button.dataset.queueId));
@@ -206,6 +208,38 @@ function updateSubtitleUI() {
     !document.getElementById("download-subtitles").checked;
 }
 
+function updateCookieUI() {
+  const source = document.getElementById("cookie-source").value;
+  document.getElementById("cookie-browser-row").hidden = source !== "browser";
+  document.getElementById("cookie-file-row").hidden = source !== "file";
+}
+
+function currentCookieOptions() {
+  const source = document.getElementById("cookie-source").value;
+  if (source === "browser") {
+    return { source, browser: document.getElementById("cookie-browser").value, path: null };
+  }
+  if (source === "file") {
+    return { source, browser: null, path: document.getElementById("cookie-file").value.trim() };
+  }
+  return null;
+}
+
+async function browseCookieFile() {
+  try {
+    const path = await invoke("plugin:dialog|open", {
+      options: {
+        directory: false,
+        multiple: false,
+        filters: [{ name: "Cookie text files", extensions: ["txt"] }],
+      },
+    });
+    if (path) document.getElementById("cookie-file").value = path;
+  } catch (error) {
+    setQueueFeedback(`Could not choose cookie file: ${error}`, "err");
+  }
+}
+
 async function fetchFormats() {
   const url = document.getElementById("url").value.trim();
   if (!url) {
@@ -221,7 +255,7 @@ async function fetchFormats() {
   setProcessing(true);
 
   try {
-    const result = await invoke("fetch_formats", { url });
+    const result = await invoke("fetch_formats", { url, cookies: currentCookieOptions() });
     if (!isCurrent()) return;
     state.formatsUrl = url;
     state.videoFormats = result.video;
@@ -394,6 +428,7 @@ async function startDownload() {
       saveThumbnail: document.getElementById("save-thumbnail").checked,
       embedMetadata: document.getElementById("embed-metadata").checked,
     },
+    cookies: currentCookieOptions(),
   };
   state.downloadQueue.push(job);
   renderQueue();
@@ -472,6 +507,7 @@ async function runQueuedDownload(job) {
       audioFormat: job.audioFormat,
       subtitles: job.subtitles,
       mediaExtras: job.mediaExtras,
+      cookies: job.cookies,
     });
     if (outcome === "cancelled") {
       setStatus("Download cancelled. Partial files were kept; continuing the queue.", "");

@@ -349,3 +349,26 @@ test('thumbnail and metadata choices are captured in a queued job', async () => 
     { embedThumbnail: true, saveThumbnail: false, embedMetadata: true }
   );
 });
+
+test('browser cookies are used for format fetching and the queued download', async () => {
+  const app = setup('completed');
+  app.element('cookie-source').value = 'browser';
+  app.element('cookie-browser').value = 'firefox';
+  const fetching = app.run('fetchFormats()');
+  const fetchCall = app.calls.find(call => call.command === 'fetch_formats');
+  assert.equal(fetchCall.args.cookies.source, 'browser');
+  assert.equal(fetchCall.args.cookies.browser, 'firefox');
+  app.resolveFetch(formats);
+  await fetching;
+  await app.run('startDownload()');
+  const downloadCall = app.calls.find(call => call.command === 'download');
+  assert.equal(downloadCall.args.cookies.browser, 'firefox');
+});
+
+test('cookie source displays only its relevant controls', () => {
+  const app = setup();
+  app.element('cookie-source').value = 'file';
+  app.run('updateCookieUI()');
+  assert.equal(app.element('cookie-file-row').hidden, false);
+  assert.equal(app.element('cookie-browser-row').hidden, true);
+});

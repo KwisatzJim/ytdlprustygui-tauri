@@ -78,6 +78,98 @@ fn media_extra_args(options: Option<&MediaExtras>) -> Vec<&'static str> {
     args
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum CookieSource {
+    Browser,
+    File,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum CookieBrowser {
+    Safari,
+    Chrome,
+    Chromium,
+    Firefox,
+    Brave,
+    Edge,
+    Opera,
+    Vivaldi,
+}
+
+impl CookieBrowser {
+    fn yt_dlp_name(self) -> &'static str {
+        match self {
+            Self::Safari => "safari",
+            Self::Chrome => "chrome",
+            Self::Chromium => "chromium",
+            Self::Firefox => "firefox",
+            Self::Brave => "brave",
+            Self::Edge => "edge",
+            Self::Opera => "opera",
+            Self::Vivaldi => "vivaldi",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CookieOptions {
+    source: CookieSource,
+    browser: Option<CookieBrowser>,
+    path: Option<String>,
+}
+
+fn cookie_args(options: Option<&CookieOptions>) -> Result<Vec<String>, String> {
+    let Some(options) = options else { return Ok(Vec::new()); };
+    match options.source {
+        CookieSource::Browser => {
+            let browser = options.browser.ok_or("Choose a browser for cookies")?;
+            Ok(vec!["--cookies-from-browser".into(), browser.yt_dlp_name().into()])
+        }
+        CookieSource::File => {
+            let path = options.path.as_deref().unwrap_or("").trim();
+            let metadata = fs::metadata(path)
+                .map_err(|error| format!("The selected cookie file is unavailable: {error}"))?;
+            if !metadata.is_file() { return Err("The selected cookie path is not a file".into()); }
+            use std::io::BufRead;
+            let file = fs::File::open(path)
+                .map_err(|error| format!("Could not read the selected cookie file: {error}"))?;
+            let mut header = String::new();
+            std::io::BufReader::new(file).read_line(&mut header)
+                .map_err(|error| format!("Could not read the selected cookie file: {error}"))?;
+            let header = header.trim_end_matches(['\r', '\n']);
+            if header != "# HTTP Cookie File" && header != "# Netscape HTTP Cookie File" {
+                return Err("The cookie file is not in Netscape format".into());
+            }
+            Ok(vec!["--cookies".into(), path.into()])
+        }
+    }
+}
+
+fn explain_cookie_error(error: String, options: Option<&CookieOptions>) -> String {
+    let safari_permission_error = matches!(
+        options,
+        Some(CookieOptions {
+            source: CookieSource::Browser,
+            browser: Some(CookieBrowser::Safari),
+            ..
+        })
+    ) && error.contains("Operation not permitted")
+        && error.contains("Cookies.binarycookies");
+    if safari_permission_error {
+        return format!("{error}\nmacOS blocked access to Safari cookies. Use a Netscape cookie file or another browser, or grant Full Disk Access to YT-DLP Rusty GUI in System Settings → Privacy & Security and restart the app.");
+    }
+    if error.to_lowercase().contains("could not find") && error.to_lowercase().contains("cookies database") {
+        let browser = options
+            .and_then(|options| options.browser)
+            .map(CookieBrowser::yt_dlp_name)
+            .unwrap_or("selected browser");
+        return format!("{error}\nThe {browser} profile could not be accessed. On macOS this may mean browser data is blocked by Privacy & Security even when the profile exists. Grant Full Disk Access to YT-DLP Rusty GUI and restart it, or select a Netscape cookie file.");
+    }
+    error
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct AppConfig {
     #[serde(default)]
@@ -399,7 +491,7 @@ fn build_description(f: &YtDlpFormat, is_video: bool, is_audio: bool) -> String 
 }
 
 #[tauri::command]
-async fn fetch_formats(url: String) -> Result<FormatsResult, String> {
+async fn fetch_formats(url: String, cookies: Option<CookieOptions>) -> Result<FormatsResult, String> {
     let url = url.trim().to_string();
     if url.is_empty() {
         return Err("Please enter a URL first".into());
@@ -413,17 +505,19 @@ async fn fetch_formats(url: String) -> Result<FormatsResult, String> {
     // gives every format's fields directly, so there's no table to misparse.
     // --no-playlist keeps this to the single video at the URL, matching what
     // the rest of this app (and the old table parser) already assumed.
-    let output = tokio::process::Command::new("yt-dlp")
-        .strip_appimage_env()
+    let mut command = tokio::process::Command::new("yt-dlp");
+    command.strip_appimage_env();
+    command.args(cookie_args(cookies.as_ref())?);
+    let output = command
         .args(["--no-warnings", "--no-playlist", "-J", &url])
         .output()
         .await
         .map_err(|e| format!("Failed to execute yt-dlp: {e}"))?;
 
     if !output.status.success() {
-        return Err(format!(
-            "Failed to fetch formats: {}",
-            String::from_utf8_lossy(&output.stderr)
+        return Err(explain_cookie_error(
+            format!("Failed to fetch formats: {}", String::from_utf8_lossy(&output.stderr)),
+            cookies.as_ref(),
         ));
     }
 
@@ -677,6 +771,7 @@ async fn download(
     audio_quality: Option<AudioQuality>,
     subtitles: Option<SubtitleOptions>,
     media_extras: Option<MediaExtras>,
+    cookies: Option<CookieOptions>,
     on_progress: tauri::ipc::Channel<String>,
     download_id: String,
     downloads: tauri::State<'_, DownloadState>,
@@ -695,6 +790,7 @@ async fn download(
     cmd.strip_appimage_env();
     cmd.args(["--newline", "--progress", "--no-colors"]);
     cmd.args(media_extra_args(media_extras.as_ref()));
+    cmd.args(cookie_args(cookies.as_ref())?);
 
     match download_type.as_str() {
         "video_audio" => {
@@ -735,7 +831,9 @@ async fn download(
 
     check_media_tools().await?;
     let (_guard, cancel) = downloads.begin(download_id)?;
-    run_download(cmd, |message| { let _ = on_progress.send(message); }, cancel).await
+    run_download(cmd, |message| { let _ = on_progress.send(message); }, cancel)
+        .await
+        .map_err(|error| explain_cookie_error(error, cookies.as_ref()))
 }
 
 fn path_after_marker(output: &[u8], marker: &str) -> Option<String> {
@@ -1036,6 +1134,69 @@ mod tests {
         };
         assert_eq!(super::media_extra_args(Some(&separate)), vec!["--write-thumbnail"]);
         assert!(super::media_extra_args(None).is_empty());
+    }
+
+
+    #[test]
+    fn browser_cookie_sources_use_supported_fixed_names() {
+        let options = super::CookieOptions {
+            source: super::CookieSource::Browser,
+            browser: Some(super::CookieBrowser::Firefox),
+            path: None,
+        };
+        assert_eq!(
+            super::cookie_args(Some(&options)).unwrap(),
+            vec!["--cookies-from-browser", "firefox"]
+        );
+        assert!(super::cookie_args(None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn cookie_files_require_netscape_header() {
+        let path = std::env::temp_dir().join(format!("rustygui-cookies-{}.txt", std::process::id()));
+        std::fs::write(&path, "not a cookie jar\n").unwrap();
+        let options = super::CookieOptions {
+            source: super::CookieSource::File,
+            browser: None,
+            path: Some(path.to_string_lossy().into()),
+        };
+        assert!(super::cookie_args(Some(&options)).unwrap_err().contains("Netscape"));
+        std::fs::write(&path, "# Netscape HTTP Cookie File\n").unwrap();
+        assert_eq!(super::cookie_args(Some(&options)).unwrap()[0], "--cookies");
+        std::fs::remove_file(path).unwrap();
+    }
+
+
+    #[test]
+    fn safari_permission_errors_explain_macos_fix() {
+        let options = super::CookieOptions {
+            source: super::CookieSource::Browser,
+            browser: Some(super::CookieBrowser::Safari),
+            path: None,
+        };
+        let error = super::explain_cookie_error(
+            "Operation not permitted: /Users/test/Library/Cookies/Cookies.binarycookies".into(),
+            Some(&options),
+        );
+        assert!(error.contains("Full Disk Access"));
+        assert!(error.contains("Netscape cookie file"));
+    }
+
+
+    #[test]
+    fn missing_browser_profile_errors_explain_cookie_choices() {
+        let options = super::CookieOptions {
+            source: super::CookieSource::Browser,
+            browser: Some(super::CookieBrowser::Firefox),
+            path: None,
+        };
+        let error = super::explain_cookie_error(
+            "could not find firefox cookies database".into(),
+            Some(&options),
+        );
+        assert!(error.contains("firefox profile could not be accessed"));
+        assert!(error.contains("Full Disk Access"));
+        assert!(error.contains("Netscape cookie file"));
     }
 
 }

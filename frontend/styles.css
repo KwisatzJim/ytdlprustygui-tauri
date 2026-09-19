@@ -106,3 +106,5 @@ th { color: var(--muted); font-weight: 600; }
 .subtitle-hint { margin-top: 0.35rem; margin-bottom: 0.55rem; }
 
 .option-checks { display: grid; gap: 0.45rem; }
+
+.cookie-hint { margin: 0.45rem 0 0; color: var(--muted); font-size: 0.8rem; }
