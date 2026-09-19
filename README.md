@@ -7,6 +7,11 @@ A desktop front end for [yt-dlp](https://github.com/yt-dlp/yt-dlp), built with R
 - Choose video and audio formats before downloading video.
 - Save a preferred video resolution, audio quality, audio language, and output folder.
 - Switch between Light, Dark, and System appearance.
+- Queue up to ten downloads and process them one at a time.
+- Download creator or automatic subtitles, with language and embedding controls.
+- Embed thumbnails and metadata, or save a separate thumbnail image.
+- Use cookies from an installed browser or a Netscape cookie file.
+- Keep yt-dlp current automatically when its installation method supports app-managed updates.
 - See live download progress and merging/conversion activity.
 - Cancel a download and keep partial files for a later retry.
 
@@ -70,7 +75,7 @@ The frontend is plain HTML, CSS, and JavaScript; no `npm install` or frontend bu
 1. Paste a video URL and choose an output folder.
 2. Set your quality preferences and download type.
 3. For **Video+Audio**, click **Fetch Formats**, then review or change the selected formats. For **Audio Only**, fetch is not required.
-4. Click **Download** and watch the status. Video and audio transfers may report separate percentages; merging or conversion can continue after a transfer reaches 100%. After completion, use **Open Downloads Folder** to reveal the result.
+4. Click **Add to Queue** and watch the status. Video and audio transfers may report separate percentages; merging or conversion can continue after a transfer reaches 100%. After completion, use **Open Downloads Folder** to reveal the result.
 5. Use **Cancel Download** to stop an active download. Partial files remain; retrying the same URL, folder, and formats may resume the transfer where yt-dlp supports it.
 
 Changing the URL clears previously fetched formats. Format tables start collapsed and can be expanded for more detail. The window grows downward as controls appear, up to the available screen space; longer content remains scrollable.
@@ -79,7 +84,7 @@ Changing the URL clears previously fetched formats. Format tables start collapse
 
 Video format fetching accepts single videos and rejects playlist-only URLs. When a video URL also contains playlist parameters, Video+Audio fetches formats and downloads only that video.
 
-Audio-only mode passes the URL to yt-dlp and processes every playlist item as a separate MP3. This behavior was verified in simulation against a two-item YouTube playlist. The app displays a reminder when Audio Only is selected, but it does not provide playlist selection or a queue interface.
+Audio-only mode passes the URL to yt-dlp and processes every playlist item as a separate MP3. This behavior was verified in simulation against a two-item YouTube playlist. The app displays a reminder when Audio Only is selected. Playlist items run within one queued audio job; the app does not provide per-item playlist selection.
 
 ## Development checks
 
@@ -98,7 +103,7 @@ Rust tests include a simulated downloader and cancellation of its child process 
 
 The app targets macOS and Linux. The GUI has been tested interactively on macOS, and the x86-64 AppImage has been built on Ubuntu and manually verified on Linux. Its bundled-library audit verified 178 libraries with none unresolved. Windows packages are not planned. Release notes should identify the platforms tested and how each installer is signed.
 
-Download the current packages from [YT-DLP Rusty GUI 0.2.2](https://github.com/KwisatzJim/ytdlprustygui-tauri/releases/tag/v0.2.2).
+Download the current packages from [YT-DLP Rusty GUI 0.3.0](https://github.com/KwisatzJim/ytdlprustygui-tauri/releases/tag/v0.3.0).
 
 See [macOS release verification and installation](docs/MACOS_RELEASE.md) for the local Apple-silicon candidate and its signing status.
 
