@@ -104,6 +104,27 @@
       A playlist URL downloads every item as a separate MP3.
     </p>
 
+    <section id="subtitle-section" class="option-group" aria-labelledby="subtitle-heading">
+      <h3 id="subtitle-heading">Subtitles</h3>
+      <label class="check"><input id="download-subtitles" type="checkbox" /> Download subtitles</label>
+      <div id="subtitle-options" hidden>
+        <div class="row">
+          <label for="subtitle-source">Subtitle Source</label>
+          <select id="subtitle-source">
+            <option value="creator">Creator-provided</option>
+            <option value="automatic">Automatically generated</option>
+            <option value="both">Both when available</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="subtitle-languages">Subtitle Languages</label>
+          <input id="subtitle-languages" type="text" value="en.*" placeholder="en.*,es" />
+        </div>
+        <p class="hint subtitle-hint">Use comma-separated language tags. <strong>en.*</strong> includes English variants.</p>
+        <label class="check"><input id="embed-subtitles" type="checkbox" checked /> Embed subtitles in the MP4</label>
+      </div>
+    </section>
+
     <section id="format-section">
       <div class="row">
         <button id="fetch-btn">Fetch Formats</button>

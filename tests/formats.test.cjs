@@ -310,3 +310,26 @@ test('queued jobs can be removed before they start', async () => {
   await running;
   assert.equal(app.calls.filter(call => call.command === 'download').length, 1);
 });
+
+test('subtitle controls are captured in a queued video job', async () => {
+  const app = setup('completed');
+  app.run(`state.formatsUrl = 'https://example.com/a';
+    document.getElementById('video-format').value = '137';
+    document.getElementById('audio-format').value = '140';
+    document.getElementById('download-subtitles').checked = true;
+    document.getElementById('subtitle-source').value = 'automatic';
+    document.getElementById('subtitle-languages').value = 'fr.*,en.*';
+    document.getElementById('embed-subtitles').checked = false`);
+  await app.run('startDownload()');
+  const request = app.calls.find(call => call.command === 'download').args;
+  assert.equal(request.subtitles.enabled, true);
+  assert.equal(request.subtitles.source, 'automatic');
+  assert.equal(request.subtitles.languages, 'fr.*,en.*');
+  assert.equal(request.subtitles.embed, false);
+});
+
+test('subtitle options are hidden in audio-only mode', () => {
+  const app = setup();
+  app.run(`document.querySelector = () => ({ value: 'audio_only' }); updateDownloadTypeUI()`);
+  assert.equal(app.element('subtitle-section').style.display, 'none');
+});

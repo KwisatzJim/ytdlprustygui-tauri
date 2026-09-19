@@ -31,6 +31,7 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("download-btn").addEventListener("click", startDownload);
   document.getElementById("cancel-btn").addEventListener("click", cancelDownload);
   document.getElementById("open-folder-btn").addEventListener("click", openOutputFolder);
+  document.getElementById("download-subtitles").addEventListener("change", updateSubtitleUI);
   document.getElementById("queue-list").addEventListener("click", (event) => {
     const button = event.target.closest("button[data-queue-id]");
     if (button) removeQueuedDownload(Number(button.dataset.queueId));
@@ -197,6 +198,12 @@ function updateDownloadTypeUI() {
     showFormats && state.audioFormats.length ? "flex" : "none";
   document.getElementById("format-lists").style.display =
     showFormats && (state.videoFormats.length || state.audioFormats.length) ? "block" : "none";
+  document.getElementById("subtitle-section").style.display = showFormats ? "block" : "none";
+}
+
+function updateSubtitleUI() {
+  document.getElementById("subtitle-options").hidden =
+    !document.getElementById("download-subtitles").checked;
 }
 
 async function fetchFormats() {
@@ -376,6 +383,12 @@ async function startDownload() {
     audioQuality: state.config.preferred_audio_quality || "high",
     videoFormat: downloadType === "video_audio" ? document.getElementById("video-format").value : null,
     audioFormat: downloadType === "video_audio" ? document.getElementById("audio-format").value : null,
+    subtitles: downloadType === "video_audio" && document.getElementById("download-subtitles").checked ? {
+      enabled: true,
+      source: document.getElementById("subtitle-source").value,
+      languages: document.getElementById("subtitle-languages").value.trim() || "en.*",
+      embed: document.getElementById("embed-subtitles").checked,
+    } : null,
   };
   state.downloadQueue.push(job);
   renderQueue();
@@ -452,6 +465,7 @@ async function runQueuedDownload(job) {
       audioQuality: job.audioQuality,
       videoFormat: job.videoFormat,
       audioFormat: job.audioFormat,
+      subtitles: job.subtitles,
     });
     if (outcome === "cancelled") {
       setStatus("Download cancelled. Partial files were kept; continuing the queue.", "");

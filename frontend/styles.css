@@ -98,3 +98,9 @@ th { color: var(--muted); font-weight: 600; }
 .queue-feedback { min-height: 1.2em; }
 .queue-feedback.var-ok { color: var(--ok); }
 .queue-feedback.var-err { color: var(--err); }
+
+.option-group { border-top: 1px solid var(--border); padding-top: 0.8rem; }
+.option-group h3 { margin: 0 0 0.55rem; font-size: 0.95rem; }
+.option-group .row { margin-top: 0.65rem; }
+.check { display: inline-flex; align-items: center; gap: 0.45rem; }
+.subtitle-hint { margin-top: 0.35rem; margin-bottom: 0.55rem; }

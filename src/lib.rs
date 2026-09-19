@@ -20,6 +20,47 @@ impl AudioQuality {
     }
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+enum SubtitleSource {
+    Creator,
+    Automatic,
+    Both,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct SubtitleOptions {
+    enabled: bool,
+    source: SubtitleSource,
+    languages: String,
+    embed: bool,
+}
+
+fn subtitle_args(options: Option<&SubtitleOptions>) -> Result<Vec<String>, String> {
+    let Some(options) = options.filter(|options| options.enabled) else {
+        return Ok(Vec::new());
+    };
+    let languages = options.languages.trim();
+    if languages.is_empty() || languages.len() > 200 || languages.contains(['\n', '\r', '\0']) {
+        return Err("Enter valid subtitle languages, such as en.* or en.*,es".into());
+    }
+    let mut args = Vec::new();
+    match options.source {
+        SubtitleSource::Creator => args.push("--write-subs".into()),
+        SubtitleSource::Automatic => args.push("--write-auto-subs".into()),
+        SubtitleSource::Both => args.extend(["--write-subs".into(), "--write-auto-subs".into()]),
+    }
+    args.extend([
+        "--sub-langs".into(), languages.into(),
+        "--sub-format".into(), "srt/best".into(),
+        "--convert-subs".into(), "srt".into(),
+    ]);
+    if options.embed {
+        args.push("--embed-subs".into());
+    }
+    Ok(args)
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct AppConfig {
     #[serde(default)]
@@ -617,6 +658,7 @@ async fn download(
     video_format: Option<String>,
     audio_format: Option<String>,
     audio_quality: Option<AudioQuality>,
+    subtitles: Option<SubtitleOptions>,
     on_progress: tauri::ipc::Channel<String>,
     download_id: String,
     downloads: tauri::State<'_, DownloadState>,
@@ -642,6 +684,7 @@ async fn download(
             if vf.is_empty() || af.is_empty() {
                 return Err("Please fetch and select both video and audio formats".into());
             }
+            cmd.args(subtitle_args(subtitles.as_ref())?);
             cmd.args([
                 // Match fetch_formats: these format IDs belong to one video.
                 "--no-playlist",
@@ -917,4 +960,43 @@ mod tests {
         assert_eq!(restored.output_dir, "/tmp/videos");
         assert_eq!(restored.preferred_audio_language.as_deref(), Some("en"));
     }
+
+    #[test]
+    fn subtitle_options_build_safe_explicit_arguments() {
+        let embedded = super::SubtitleOptions {
+            enabled: true,
+            source: super::SubtitleSource::Both,
+            languages: "en.*,es".into(),
+            embed: true,
+        };
+        let args = super::subtitle_args(Some(&embedded)).unwrap();
+        assert!(args.contains(&"--write-subs".to_string()));
+        assert!(args.contains(&"--write-auto-subs".to_string()));
+        assert!(args.contains(&"--embed-subs".to_string()));
+        assert!(!args.iter().any(|arg| arg == "--no-keep-subs"));
+        assert!(args.windows(2).any(|pair| pair == ["--sub-langs", "en.*,es"]));
+
+        let separate = super::SubtitleOptions {
+            embed: false,
+            source: super::SubtitleSource::Creator,
+            ..embedded
+        };
+        let args = super::subtitle_args(Some(&separate)).unwrap();
+        assert!(args.contains(&"--write-subs".to_string()));
+        assert!(!args.contains(&"--write-auto-subs".to_string()));
+        assert!(!args.contains(&"--embed-subs".to_string()));
+        assert!(super::subtitle_args(None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn subtitle_languages_are_bounded_and_single_line() {
+        let options = super::SubtitleOptions {
+            enabled: true,
+            source: super::SubtitleSource::Automatic,
+            languages: "en\n--other-option".into(),
+            embed: false,
+        };
+        assert!(super::subtitle_args(Some(&options)).is_err());
+    }
+
 }
