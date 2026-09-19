@@ -28,6 +28,7 @@ function setup(downloadResult, cancelResult, dependencies = []) {
       if (command === 'download') return typeof downloadResult === 'function' ? downloadResult(args) : downloadResult;
       if (command === 'cancel_download') return cancelResult;
       if (command === 'check_dependencies') return dependencies;
+      if (command === 'update_ytdlp') return { previousVersion: '2026.08.19', currentVersion: '2026.09.01', message: 'updated' };
       if (command === 'open_output_folder') return undefined;
       if (command === 'plugin:clipboard-manager|read_text') return 'https://example.com/b';
     } } }, addEventListener() {} },
@@ -68,6 +69,20 @@ test('dependency status uses text content and reports missing tools', async () =
   assert.equal(app.element('dependency-ffmpeg').textContent, 'FFmpeg: Missing');
   assert.equal(app.element('dependency-ffmpeg').title, '<missing>');
   assert.match(app.element('status').textContent, /FFmpeg/);
+});
+
+
+test('manual yt-dlp update reports the version change and records the check time', async () => {
+  const app = setup(undefined, undefined, [
+    { name: 'yt-dlp', available: true, detail: '2026.09.01' },
+    { name: 'FFmpeg', available: true, detail: 'ffmpeg' },
+    { name: 'FFprobe', available: true, detail: 'ffprobe' }
+  ]);
+  await app.run('updateYtDlp(false)');
+  assert.match(app.element('update-ytdlp-status').textContent, /Updated yt-dlp from 2026.08.19 to 2026.09.01/);
+  assert.equal(app.calls.some(call => call.command === 'update_ytdlp'), true);
+  const saved = app.calls.filter(call => call.command === 'save_config').at(-1);
+  assert.equal(typeof saved.args.config.last_ytdlp_update_check, 'number');
 });
 
 test('successful download offers to open the completed output folder', async () => {

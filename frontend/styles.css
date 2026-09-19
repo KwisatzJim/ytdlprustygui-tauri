@@ -132,3 +132,9 @@ th { color: var(--muted); font-weight: 600; }
   .tabs { width: 100%; }
   .tab { flex: 1; }
 }
+
+.updater-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; }
+.updater-controls .compact-hint { flex: 1 1 260px; margin: 0; }
+.compact-hint.var-ok { color: var(--ok); }
+.compact-hint.var-warn { color: var(--warn); }
+.compact-hint.var-err { color: var(--err); }

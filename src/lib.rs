@@ -186,7 +186,13 @@ struct AppConfig {
     preferred_video_resolution: Option<u32>,
     #[serde(default)]
     preferred_audio_quality: AudioQuality,
+    #[serde(default = "default_true")]
+    automatic_ytdlp_updates: bool,
+    #[serde(default)]
+    last_ytdlp_update_check: Option<u64>,
 }
+
+fn default_true() -> bool { true }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -336,6 +342,95 @@ async fn check_dependencies() -> Vec<DependencyStatus> {
         dependency_status("FFprobe", "ffprobe"),
     );
     vec![yt_dlp, ffmpeg, ffprobe]
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct YtDlpUpdateResult {
+    previous_version: String,
+    current_version: String,
+    message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum YtDlpUpdateMethod {
+    Homebrew,
+    Apt,
+    SelfUpdate,
+}
+
+fn ytdlp_update_method(executable: &std::path::Path) -> YtDlpUpdateMethod {
+    let path = executable.to_string_lossy();
+    if path.contains("/Cellar/yt-dlp/") || path.contains("/homebrew/") {
+        YtDlpUpdateMethod::Homebrew
+    } else if path == "/usr/bin/yt-dlp" {
+        YtDlpUpdateMethod::Apt
+    } else {
+        YtDlpUpdateMethod::SelfUpdate
+    }
+}
+
+async fn command_output(mut command: tokio::process::Command) -> Result<std::process::Output, String> {
+    command.strip_appimage_env();
+    tokio::time::timeout(std::time::Duration::from_secs(300), command.output())
+        .await
+        .map_err(|_| "The yt-dlp update timed out after five minutes".to_string())?
+        .map_err(|error| format!("Could not start the yt-dlp updater: {error}"))
+}
+
+fn update_message(output: &std::process::Output) -> String {
+    let bytes = if output.stdout.is_empty() { &output.stderr } else { &output.stdout };
+    String::from_utf8_lossy(bytes)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .take(6)
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(600)
+        .collect()
+}
+
+#[tauri::command]
+async fn update_ytdlp() -> Result<YtDlpUpdateResult, String> {
+    let previous_version = check_ytdlp()?;
+    let which_output = command_output({
+        let mut command = tokio::process::Command::new("which");
+        command.arg("yt-dlp");
+        command
+    }).await?;
+    if !which_output.status.success() {
+        return Err("Could not locate the active yt-dlp executable".into());
+    }
+    let executable = std::path::PathBuf::from(String::from_utf8_lossy(&which_output.stdout).trim());
+    let method = ytdlp_update_method(&executable.canonicalize().unwrap_or(executable));
+    if method == YtDlpUpdateMethod::Apt {
+        return Err("This yt-dlp installation is managed by Ubuntu/Debian apt. Update it with your normal system updates: sudo apt update && sudo apt install --only-upgrade yt-dlp".into());
+    }
+
+    let output = match method {
+        YtDlpUpdateMethod::Homebrew => command_output({
+            let mut command = tokio::process::Command::new("brew");
+            command.args(["upgrade", "yt-dlp"]);
+            command
+        }).await?,
+        YtDlpUpdateMethod::SelfUpdate => command_output({
+            let mut command = tokio::process::Command::new("yt-dlp");
+            command.arg("-U");
+            command
+        }).await?,
+        YtDlpUpdateMethod::Apt => unreachable!(),
+    };
+    let message = update_message(&output);
+    if !output.status.success() {
+        return Err(format!("yt-dlp update failed: {}", if message.is_empty() { output.status.to_string() } else { message }));
+    }
+    let current_version = check_ytdlp()?;
+    Ok(YtDlpUpdateResult {
+        previous_version,
+        current_version,
+        message: if message.is_empty() { "Update check completed".into() } else { message },
+    })
 }
 
 fn existing_folder(path: &str) -> Result<std::path::PathBuf, String> {
@@ -883,6 +978,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             check_ytdlp,
             check_dependencies,
+            update_ytdlp,
             open_output_folder,
             fetch_formats,
             download,
@@ -916,6 +1012,14 @@ mod tests {
         assert_eq!(super::dependency_version_arg("yt-dlp"), "--version");
         assert_eq!(super::dependency_version_arg("ffmpeg"), "-version");
         assert_eq!(super::dependency_version_arg("ffprobe"), "-version");
+    }
+
+    #[test]
+    fn updater_uses_the_installation_owner() {
+        use super::YtDlpUpdateMethod;
+        assert_eq!(super::ytdlp_update_method(std::path::Path::new("/opt/homebrew/Cellar/yt-dlp/2026/bin/yt-dlp")), YtDlpUpdateMethod::Homebrew);
+        assert_eq!(super::ytdlp_update_method(std::path::Path::new("/usr/bin/yt-dlp")), YtDlpUpdateMethod::Apt);
+        assert_eq!(super::ytdlp_update_method(std::path::Path::new("/home/jim/.local/bin/yt-dlp")), YtDlpUpdateMethod::SelfUpdate);
     }
 
     #[test]
@@ -1051,6 +1155,8 @@ mod tests {
     fn audio_quality_defaults_and_persistence() {
         let mut config: AppConfig = serde_json::from_str("{}").unwrap();
         assert_eq!(config.preferred_audio_quality, AudioQuality::High);
+        assert!(config.automatic_ytdlp_updates);
+        assert_eq!(config.last_ytdlp_update_check, None);
         config.preferred_audio_quality = AudioQuality::Low;
         let restored: AppConfig = serde_json::from_str(
             &serde_json::to_string(&config).unwrap(),

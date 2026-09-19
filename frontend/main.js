@@ -13,7 +13,7 @@ const state = {
   // Mirrors the backend's AppConfig. save_config replaces the whole file, so
   // we keep the full object here and merge into it on every change instead
   // of sending single-field patches that would wipe out the other fields.
-  config: { output_dir: "", preferred_audio_language: null, preferred_video_resolution: null, preferred_audio_quality: "high", theme: "system" },
+  config: { output_dir: "", preferred_audio_language: null, preferred_video_resolution: null, preferred_audio_quality: "high", theme: "system", automatic_ytdlp_updates: true, last_ytdlp_update_check: null },
 };
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -37,6 +37,10 @@ window.addEventListener("DOMContentLoaded", () => {
   document.getElementById("download-subtitles").addEventListener("change", updateSubtitleUI);
   document.getElementById("cookie-source").addEventListener("change", updateCookieUI);
   document.getElementById("cookie-file-btn").addEventListener("click", browseCookieFile);
+  document.getElementById("update-ytdlp-btn").addEventListener("click", () => updateYtDlp(false));
+  document.getElementById("automatic-ytdlp-updates").addEventListener("change", (event) => {
+    saveConfig({ automatic_ytdlp_updates: event.target.checked });
+  });
   document.getElementById("queue-list").addEventListener("click", (event) => {
     const button = event.target.closest("button[data-queue-id]");
     if (button) removeQueuedDownload(Number(button.dataset.queueId));
@@ -97,6 +101,12 @@ async function loadConfig() {
     document.getElementById("preferred-audio-quality").value =
       config.preferred_audio_quality || "high";
     selectBestAudioFormat();
+    const automaticUpdates = config.automatic_ytdlp_updates !== false;
+    document.getElementById("automatic-ytdlp-updates").checked = automaticUpdates;
+    const lastCheck = config.last_ytdlp_update_check || 0;
+    if (automaticUpdates && Math.floor(Date.now() / 1000) - lastCheck >= 86400) {
+      updateYtDlp(true);
+    }
   } catch (e) {
     console.error("Failed to load saved config", e);
   }
@@ -117,6 +127,28 @@ async function checkYtDlp() {
     setStatus(`Ready (yt-dlp ${version})`, "");
   } catch (e) {
     setStatus(e, "err");
+  }
+}
+
+async function updateYtDlp(isAutomatic = false) {
+  const button = document.getElementById("update-ytdlp-btn");
+  const status = document.getElementById("update-ytdlp-status");
+  button.disabled = true;
+  status.textContent = isAutomatic ? "Checking yt-dlp automatically…" : "Checking for a yt-dlp update…";
+  status.className = "compact-hint var-warn";
+  try {
+    const result = await invoke("update_ytdlp");
+    status.textContent = result.previousVersion === result.currentVersion
+      ? `yt-dlp ${result.currentVersion} is current.`
+      : `Updated yt-dlp from ${result.previousVersion} to ${result.currentVersion}.`;
+    status.className = "compact-hint var-ok";
+    await checkDependencies();
+  } catch (error) {
+    status.textContent = String(error);
+    status.className = "compact-hint var-err";
+  } finally {
+    button.disabled = false;
+    await saveConfig({ last_ytdlp_update_check: Math.floor(Date.now() / 1000) });
   }
 }
 
